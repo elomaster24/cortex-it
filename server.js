@@ -9,7 +9,15 @@ const crypto  = require('crypto');
 const fs      = require('fs');
 const jwt     = require('jsonwebtoken');
 const { init, getDb, auditLog } = require('./src/database');
-const { JWT_SECRET }  = require('./src/middleware');
+const { JWT_SECRET, getTokenFromRequest }  = require('./src/middleware');
+
+function parseCookies(cookieHeader) {
+  return (cookieHeader || '').split(';').reduce((acc, c) => {
+    const [k, ...v] = c.trim().split('=');
+    if (k) try { acc[k.trim()] = decodeURIComponent(v.join('=')); } catch {}
+    return acc;
+  }, {});
+}
 
 // ── Warn if default JWT secret is used ──────────────────────────────────────
 if (JWT_SECRET === 'cortex-secret-key-change-me') {
@@ -70,7 +78,22 @@ setInterval(() => {
 // ─────────────────────────────────────────────
 const adminApp = express();
 adminApp.set('trust proxy', 1);
-adminApp.use(helmet({ contentSecurityPolicy: false }));
+adminApp.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],  // inline scripts; migrate to external files in future
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:"],
+      connectSrc: ["'self'", "ws:", "wss:"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    }
+  },
+  hsts: { maxAge: 31536000, includeSubDomains: true },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
+}));
 adminApp.use(cors(corsOptions));
 adminApp.use(express.json({ limit: '50kb' }));
 adminApp.use(express.static(path.join(__dirname, 'public', 'admin')));
@@ -80,11 +103,11 @@ adminApp.use('/api/admin', require('./src/routes/admin'));
 
 // Admin: send command to a specific agent
 adminApp.post('/api/admin/agent/:userId/execute', rateLimiter(60, 60000), (req, res) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const token = getTokenFromRequest(req);
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  let decoded;
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    decoded = jwt.verify(token, JWT_SECRET);
     if (decoded.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
   } catch { return res.status(403).json({ error: 'Invalid token' }); }
 
@@ -116,8 +139,7 @@ adminApp.post('/api/admin/agent/:userId/execute', rateLimiter(60, 60000), (req, 
 
 // Admin: list connected agents
 adminApp.get('/api/admin/agents/live', (req, res) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const token = getTokenFromRequest(req);
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
@@ -141,9 +163,19 @@ const adminIo = new Server(adminServer, {
   maxHttpBufferSize: 1e5  // 100KB max
 });
 adminIo.on('connection', (socket) => {
-  const authHeader = socket.handshake.auth?.token;
+  // Validate origin (CSRF protection for WebSocket)
+  const origin = socket.handshake.headers.origin;
+  if (origin && !CORS_ORIGINS.includes(origin)) {
+    socket.disconnect();
+    return;
+  }
+
+  // Read session from httpOnly cookie
+  const cookies = parseCookies(socket.handshake.headers.cookie);
+  const sessionToken = cookies.session;
+
   try {
-    const decoded = jwt.verify(authHeader, JWT_SECRET);
+    const decoded = jwt.verify(sessionToken, JWT_SECRET);
     if (decoded.role !== 'admin') { socket.disconnect(); return; }
     adminSockets.add(socket);
 
@@ -151,7 +183,7 @@ adminIo.on('connection', (socket) => {
     agents.forEach((agent, userId) => list.push({ userId, info: agent.info||{}, stats: agent.stats||{}, connectedAt: agent.connectedAt, lastSeen: agent.lastSeen }));
     socket.emit('agents_snapshot', list);
 
-    // Idle timeout: disconnect admin socket after 2 hours of inactivity
+    // Idle timeout: disconnect after 2 hours of inactivity
     let idleTimer = setTimeout(() => socket.disconnect(), 2 * 60 * 60 * 1000);
     socket.onAny(() => {
       clearTimeout(idleTimer);
@@ -176,7 +208,22 @@ adminServer.listen(ADMIN_PORT, '0.0.0.0', () => {
 // ─────────────────────────────────────────────
 const userApp = express();
 userApp.set('trust proxy', 1);
-userApp.use(helmet({ contentSecurityPolicy: false }));
+userApp.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:"],
+      connectSrc: ["'self'", "ws:", "wss:"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    }
+  },
+  hsts: { maxAge: 31536000, includeSubDomains: true },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
+}));
 userApp.use(cors(corsOptions));
 userApp.use(express.json({ limit: '100kb' }));
 userApp.use(express.static(path.join(__dirname, 'public', 'user')));
@@ -222,7 +269,7 @@ userApp.use('/api/chat', rateLimiter(60, 60000), require('./src/routes/chat'));
 
 // Agent status
 userApp.get('/api/agent/status', (req, res) => {
-  const token = (req.headers['authorization'] || '').split(' ')[1];
+  const token = getTokenFromRequest(req);
   if (!token) return res.json({ connected: false });
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
@@ -233,7 +280,7 @@ userApp.get('/api/agent/status', (req, res) => {
 
 // Execute command via agent
 userApp.post('/api/agent/execute', rateLimiter(30, 60000), (req, res) => {
-  const token = (req.headers['authorization'] || '').split(' ')[1];
+  const token = getTokenFromRequest(req);
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
   try {
     const decoded = jwt.verify(token, JWT_SECRET);

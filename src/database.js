@@ -22,6 +22,8 @@ function init() {
       password_hash TEXT NOT NULL,
       is_active INTEGER DEFAULT 1,
       force_password_change INTEGER DEFAULT 0,
+      login_attempts INTEGER DEFAULT 0,
+      locked_until TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       last_active TEXT DEFAULT (datetime('now'))
     );
@@ -89,6 +91,13 @@ function init() {
   const cols = db.pragma('table_info(users)').map(c => c.name);
   if (!cols.includes('force_password_change')) {
     db.exec('ALTER TABLE users ADD COLUMN force_password_change INTEGER DEFAULT 0');
+  }
+  const colNames = db.pragma('table_info(users)').map(c => c.name);
+  if (!colNames.includes('login_attempts')) {
+    db.exec('ALTER TABLE users ADD COLUMN login_attempts INTEGER DEFAULT 0');
+  }
+  if (!colNames.includes('locked_until')) {
+    db.exec('ALTER TABLE users ADD COLUMN locked_until TEXT');
   }
 
   // Clean up expired blacklisted tokens periodically

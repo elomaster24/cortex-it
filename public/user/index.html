@@ -368,11 +368,10 @@
 
 <script>
 const API='';
-let token=localStorage.getItem('cx_token');
-let user=null, tier='med', sessionId=null, sending=false, agentConnected=false, agentTimer=null, agentPcInfo=null;
+let user=null, tier='med', sessionId=null, sending=false, agentConnected=false, agentTimer=null, agentPcInfo=null, agentTokenValue=null;
 
 async function api(path,opts={}){
-  const r=await fetch(API+path,{...opts,headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,...(opts.headers||{})}});
+  const r=await fetch(API+path,{...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});
   if(r.status===401||r.status===403){logout();throw new Error('Unauthorized');}
   return r.json();
 }
@@ -386,7 +385,9 @@ async function login(){
   try{
     const d=await fetch(API+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:e,password:p})}).then(r=>r.json());
     if(d.error){document.getElementById('authErr').textContent=d.error;return;}
-    token=d.token;user=d.user;localStorage.setItem('cx_token',token);showApp();
+    user=d.user;
+    if(d.force_password_change){showChangePwModal();return;}
+    showApp();
   }catch{document.getElementById('authErr').textContent='Verbindungsfehler — Server nicht erreichbar';}
 }
 
@@ -396,11 +397,44 @@ async function register(){
   try{
     const d=await fetch(API+'/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,password:pass,company:comp})}).then(r=>r.json());
     if(d.error){document.getElementById('authErr').textContent=d.error;return;}
-    token=d.token;user=d.user;localStorage.setItem('cx_token',token);showApp();
+    user=d.user;showApp();
   }catch{document.getElementById('authErr').textContent='Verbindungsfehler';}
 }
 
-function logout(){localStorage.removeItem('cx_token');token=null;user=null;clearInterval(agentTimer);document.getElementById('loginWrap').style.display='flex';document.getElementById('app').classList.remove('on');}
+function showChangePwModal(){
+  // Simple inline change-password flow after forced change
+  document.getElementById('loginWrap').style.display='none';
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:999';
+  modal.innerHTML=`<div style="background:#fff;border-radius:16px;padding:36px;width:380px;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+    <h2 style="font-size:20px;font-weight:800;margin-bottom:8px">Passwort ändern</h2>
+    <p style="font-size:13px;color:#6b8f74;margin-bottom:20px">Bitte ändere dein Passwort beim ersten Login.</p>
+    <input id="cpCurrent" type="password" placeholder="Aktuelles Passwort" style="width:100%;padding:11px 14px;border:1.5px solid #d1ead9;border-radius:9px;font-size:14px;margin-bottom:10px;outline:none">
+    <input id="cpNew" type="password" placeholder="Neues Passwort (min. 6 Zeichen)" style="width:100%;padding:11px 14px;border:1.5px solid #d1ead9;border-radius:9px;font-size:14px;margin-bottom:10px;outline:none">
+    <input id="cpConfirm" type="password" placeholder="Neues Passwort bestätigen" style="width:100%;padding:11px 14px;border:1.5px solid #d1ead9;border-radius:9px;font-size:14px;margin-bottom:16px;outline:none">
+    <div id="cpErr" style="color:#dc2626;font-size:13px;min-height:18px;margin-bottom:10px"></div>
+    <button onclick="submitChangePw(this.closest('div').closest('div'))" style="width:100%;padding:12px;background:linear-gradient(135deg,#16a34a,#059669);border:none;border-radius:9px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">Passwort speichern</button>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+async function submitChangePw(modal){
+  const cur=document.getElementById('cpCurrent').value,nw=document.getElementById('cpNew').value,conf=document.getElementById('cpConfirm').value;
+  if(!cur||!nw||!conf){document.getElementById('cpErr').textContent='Alle Felder ausfüllen';return;}
+  if(nw!==conf){document.getElementById('cpErr').textContent='Passwörter stimmen nicht überein';return;}
+  if(nw.length<6){document.getElementById('cpErr').textContent='Min. 6 Zeichen';return;}
+  try{
+    const d=await api('/api/auth/change-password',{method:'POST',body:JSON.stringify({currentPassword:cur,newPassword:nw})});
+    if(d.error){document.getElementById('cpErr').textContent=d.error;return;}
+    modal.remove();showApp();
+  }catch(e){document.getElementById('cpErr').textContent='Fehler: '+e.message;}
+}
+
+async function logout(){
+  try{await api('/api/auth/logout',{method:'POST'});}catch{}
+  user=null;clearInterval(agentTimer);agentConnected=false;agentPcInfo=null;agentTokenValue=null;
+  document.getElementById('loginWrap').style.display='flex';document.getElementById('app').classList.remove('on');
+}
 
 async function showApp(){
   document.getElementById('loginWrap').style.display='none';document.getElementById('app').classList.add('on');
@@ -425,9 +459,19 @@ async function checkAgent(){
   }catch{}
 }
 
-function showAgentModal(){document.getElementById('tokenText').textContent=token;document.getElementById('agentModal').classList.add('on');}
+async function showAgentModal(){
+  document.getElementById('tokenText').textContent='Lade Token...';
+  document.getElementById('agentModal').classList.add('on');
+  if(!agentTokenValue){
+    try{
+      const d=await api('/api/auth/agent-token');
+      agentTokenValue=d.token;
+    }catch{agentTokenValue=null;}
+  }
+  document.getElementById('tokenText').textContent=agentTokenValue||'Fehler beim Laden';
+}
 function closeAgentModal(){document.getElementById('agentModal').classList.remove('on');}
-function copyToken(){navigator.clipboard.writeText(token);const b=document.querySelector('.copy-token');b.textContent='✔ Kopiert';b.style.background='var(--accent)';b.style.color='#fff';setTimeout(()=>{b.textContent='Kopieren';b.style.background='';b.style.color='';},2000);}
+function copyToken(){if(!agentTokenValue)return;navigator.clipboard.writeText(agentTokenValue);const b=document.querySelector('.copy-token');b.textContent='✔ Kopiert';b.style.background='var(--accent)';b.style.color='#fff';setTimeout(()=>{b.textContent='Kopieren';b.style.background='';b.style.color='';},2000);}
 
 async function loadSessions(){
   try{
@@ -470,7 +514,6 @@ function formatAI(m){
 
 function formatMD(txt){
   if(!txt)return'';
-  // Extract code blocks first to protect them
   const codeBlocks=[];
   let h=txt.replace(/```(\w*)\n?([\s\S]*?)```/g,(_,lang,code)=>{
     const i=codeBlocks.length;
@@ -478,31 +521,23 @@ function formatMD(txt){
     return`\x00CODE${i}\x00`;
   });
   h=esc(h);
-  // Restore code blocks (already escaped inside)
   h=h.replace(/\x00CODE(\d+)\x00/g,(_,i)=>codeBlocks[i]);
-  // Headings
   h=h.replace(/^### (.+)$/gm,'<h4 style="font-size:13px;font-weight:700;color:var(--text);margin:14px 0 6px">$1</h4>');
   h=h.replace(/^## (.+)$/gm,'<h3 style="font-size:15px;font-weight:700;color:var(--text);margin:16px 0 8px;border-bottom:1px solid var(--border);padding-bottom:4px">$1</h3>');
   h=h.replace(/^# (.+)$/gm,'<h2 style="font-size:17px;font-weight:800;color:var(--text);margin:16px 0 8px">$1</h2>');
-  // Bold & italic
   h=h.replace(/\*\*\*(.*?)\*\*\*/g,'<strong><em>$1</em></strong>');
   h=h.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
   h=h.replace(/\*(.*?)\*/g,'<em>$1</em>');
-  // Inline code
   h=h.replace(/`([^`\n]+)`/g,'<code>$1</code>');
-  // Ordered list
   h=h.replace(/((?:^\d+\. .+\n?)+)/gm,m=>{
     const items=m.trim().split('\n').map(l=>l.replace(/^\d+\. /,'').trim());
     return'<ol style="margin:8px 0 8px 18px;line-height:1.8">'+items.map(i=>`<li>${i}</li>`).join('')+'</ol>';
   });
-  // Unordered list
   h=h.replace(/((?:^[-*] .+\n?)+)/gm,m=>{
     const items=m.trim().split('\n').map(l=>l.replace(/^[-*] /,'').trim());
     return'<ul style="margin:8px 0 8px 18px;line-height:1.8">'+items.map(i=>`<li>${i}</li>`).join('')+'</ul>';
   });
-  // Horizontal rule
   h=h.replace(/^---$/gm,'<hr style="border:none;border-top:1px solid var(--border);margin:12px 0">');
-  // Paragraphs (double newline)
   h=h.replace(/\n\n+/g,'</p><p style="margin:8px 0">');
   h=h.replace(/\n/g,'<br>');
   return'<p style="margin:0">'+h+'</p>';
@@ -536,18 +571,16 @@ async function send(){
   document.getElementById('typingRow').classList.add('on');
   const tm={low:'low',med:'medium',ult:'ultra'};
 
-  // Create placeholder for streaming response
   const streamId='stream_'+Date.now();
   const streamDiv=document.createElement('div');
-  streamDiv.id=streamId;
-  streamDiv.className='msg';
+  streamDiv.id=streamId;streamDiv.className='msg';
   c.appendChild(streamDiv);
 
   let accumulated='';
   try{
     const resp=await fetch('/api/chat/message/stream',{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+      headers:{'Content-Type':'application/json'},
       body:JSON.stringify({sessionId,content:txt,tier:tm[tier],pcInfo:agentPcInfo})
     });
     if(!resp.ok)throw new Error('Server error '+resp.status);
@@ -606,7 +639,8 @@ function esc(s){const d=document.createElement('div');d.textContent=s||'';return
 function ea(s){return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}
 function ft(d){if(!d)return'';try{return new Date(d.includes('Z')?d:d+'Z').toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});}catch{return'';}}
 
-if(token)showApp();
+// Check existing session on page load
+(async()=>{try{const d=await api('/api/auth/me');if(d.user){user=d.user;showApp();}}catch{}})();
 </script>
 </body>
 </html>

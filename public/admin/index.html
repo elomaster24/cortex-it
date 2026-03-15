@@ -160,7 +160,7 @@
     <h1>CORTEX</h1>
     <div class="sub">Admin Dashboard</div>
     <div class="fg"><label>E-Mail</label><input type="email" id="lEmail" value="admin@cortex.local"></div>
-    <div class="fg"><label>Passwort</label><input type="password" id="lPass" value="admin123" onkeydown="if(event.key==='Enter')login()"></div>
+    <div class="fg"><label>Passwort</label><input type="password" id="lPass" placeholder="••••••••" onkeydown="if(event.key==='Enter')login()"></div>
     <button class="btn-grad" onclick="login()">Anmelden →</button>
     <div class="err" id="loginErr"></div>
   </div>
@@ -294,11 +294,10 @@
 
 <script>
 const API='';
-let token=localStorage.getItem('cx_admin_token');
 let currentUser=null, allUsers=[], liveAgents=new Map(), adminSocket=null;
 
 async function api(path,opts={}){
-  const r=await fetch(API+path,{...opts,headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,...(opts.headers||{})}});
+  const r=await fetch(API+path,{...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});
   if(r.status===401||r.status===403){logout();throw new Error('Unauth');}
   return r.json();
 }
@@ -309,11 +308,49 @@ async function login(){
     const d=await fetch(API+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:e,password:p})}).then(r=>r.json());
     if(d.error){document.getElementById('loginErr').textContent=d.error;return;}
     if(d.user.role!=='admin'){document.getElementById('loginErr').textContent='Nur Admins';return;}
-    token=d.token;currentUser=d.user;localStorage.setItem('cx_admin_token',token);showApp();
+    currentUser=d.user;
+    if(d.force_password_change){
+      document.getElementById('loginErr').textContent='';
+      showForcePwChange();
+      return;
+    }
+    showApp();
   }catch{document.getElementById('loginErr').textContent='Verbindungsfehler';}
 }
 
-function logout(){localStorage.removeItem('cx_admin_token');token=null;if(adminSocket)adminSocket.disconnect();document.getElementById('loginWrap').style.display='flex';document.getElementById('app').classList.remove('on');}
+function showForcePwChange(){
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:999';
+  modal.innerHTML=`<div style="background:#fff;border-radius:16px;padding:36px;width:380px;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+    <h2 style="font-size:20px;font-weight:800;margin-bottom:8px">Passwort ändern</h2>
+    <p style="font-size:13px;color:#6b8f74;margin-bottom:20px">Sicherheitsanforderung: Bitte ändere dein Standard-Passwort.</p>
+    <input id="fpCur" type="password" placeholder="Aktuelles Passwort" style="width:100%;padding:11px 14px;border:1.5px solid #d1ead9;border-radius:9px;font-size:14px;margin-bottom:10px;outline:none">
+    <input id="fpNew" type="password" placeholder="Neues Passwort (min. 6 Zeichen)" style="width:100%;padding:11px 14px;border:1.5px solid #d1ead9;border-radius:9px;font-size:14px;margin-bottom:10px;outline:none">
+    <input id="fpConf" type="password" placeholder="Bestätigen" style="width:100%;padding:11px 14px;border:1.5px solid #d1ead9;border-radius:9px;font-size:14px;margin-bottom:16px;outline:none">
+    <div id="fpErr" style="color:#dc2626;font-size:13px;min-height:18px;margin-bottom:10px"></div>
+    <button onclick="submitForcePw(this.closest('div').closest('div'))" style="width:100%;padding:12px;background:linear-gradient(135deg,#16a34a,#059669);border:none;border-radius:9px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">Passwort speichern</button>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+async function submitForcePw(modal){
+  const cur=document.getElementById('fpCur').value,nw=document.getElementById('fpNew').value,conf=document.getElementById('fpConf').value;
+  if(!cur||!nw||!conf){document.getElementById('fpErr').textContent='Alle Felder ausfüllen';return;}
+  if(nw!==conf){document.getElementById('fpErr').textContent='Passwörter stimmen nicht überein';return;}
+  if(nw.length<6){document.getElementById('fpErr').textContent='Min. 6 Zeichen';return;}
+  try{
+    const d=await api('/api/auth/change-password',{method:'POST',body:JSON.stringify({currentPassword:cur,newPassword:nw})});
+    if(d.error){document.getElementById('fpErr').textContent=d.error;return;}
+    modal.remove();showApp();
+  }catch(e){document.getElementById('fpErr').textContent='Fehler: '+e.message;}
+}
+
+async function logout(){
+  try{await api('/api/auth/logout',{method:'POST'});}catch{}
+  currentUser=null;
+  if(adminSocket)adminSocket.disconnect();adminSocket=null;
+  document.getElementById('loginWrap').style.display='flex';document.getElementById('app').classList.remove('on');
+}
 
 async function showApp(){
   document.getElementById('loginWrap').style.display='none';document.getElementById('app').classList.add('on');
@@ -324,9 +361,9 @@ async function showApp(){
   connectAdminSocket();
 }
 
-// ── Socket.io Live Connection ──
+// ── Socket.io Live Connection — cookies sent automatically ──
 function connectAdminSocket(){
-  adminSocket = io({auth:{token}});
+  adminSocket = io({ withCredentials: true });
 
   adminSocket.on('agents_snapshot', (list) => {
     liveAgents.clear();
@@ -521,7 +558,7 @@ function renderUsers(users){
     <td><strong>${esc(u.name)}</strong><br><span style="font-size:11px;color:var(--muted)">${esc(u.email)}</span></td>
     <td>${esc(u.company||'–')}</td>
     <td><span class="badge ${u.role}">${u.role}</span></td>
-    <td><span class="badge ${u.is_active?'active':'inactive'}">${u.is_active?'Aktiv':'Inaktiv'}</span></td>
+    <td><span class="badge ${u.is_active?'active':'inactive'}">${u.is_active?'Aktiv':'Inaktiv'}</span>${u.force_password_change?'<span style="font-size:10px;color:var(--orange);margin-left:4px">PW-Änderung</span>':''}</td>
     <td>${u.session_count}</td>
     <td><div style="display:flex;gap:4px"><span class="tk h">${fn(u.haiku_tokens)}</span><span class="tk s">${fn(u.sonnet_tokens)}</span><span class="tk o">${fn(u.opus_tokens)}</span></div></td>
     <td style="font-size:12px">${fd(u.last_active)}</td>
@@ -607,7 +644,8 @@ function esc(s){const d=document.createElement('div');d.textContent=s||'';return
 function fn(n){return(n||0).toLocaleString('de-DE');}
 function fd(d){if(!d)return'–';try{return new Date(d.includes('Z')?d:d+'Z').toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});}catch{return'–';}}
 
-if(token)showApp();
+// Check existing session on page load
+(async()=>{try{const d=await api('/api/auth/me');if(d.user&&d.user.role==='admin'){currentUser=d.user;showApp();}}catch{}})();
 </script>
 </body>
 </html>

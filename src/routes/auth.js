@@ -8,7 +8,15 @@ const { JWT_SECRET, authenticateToken } = require('../middleware');
 
 const router = express.Router();
 
-// Simple in-memory rate limiter for login attempts
+const SESSION_COOKIE_OPTS = {
+  httpOnly: true,
+  secure: process.env.HTTPS === 'true',
+  sameSite: 'strict',
+  maxAge: 24 * 60 * 60 * 1000,
+  path: '/'
+};
+
+// In-memory rate limiter (backs up DB lockout)
 const loginAttempts = new Map();
 function checkRateLimit(ip) {
   const now = Date.now();
@@ -16,21 +24,22 @@ function checkRateLimit(ip) {
   if (now > entry.resetAt) { entry.count = 0; entry.resetAt = now + 60000; }
   entry.count++;
   loginAttempts.set(ip, entry);
-  return entry.count <= 10; // max 10 attempts per minute
+  return entry.count <= 20;
 }
 
 function getIp(req) {
   return req.ip || req.connection?.remoteAddress || 'unknown';
 }
 
-function signToken(userId, role) {
+function signSessionToken(userId, role) {
   const jti = crypto.randomBytes(16).toString('hex');
-  return { token: jwt.sign({ userId, role, jti }, JWT_SECRET, { expiresIn: '24h' }), jti };
+  const token = jwt.sign({ userId, role, jti }, JWT_SECRET, { expiresIn: '24h' });
+  return { token, jti };
 }
 
 router.post('/login', (req, res) => {
   const ip = getIp(req);
-  if (!checkRateLimit(ip)) return res.status(429).json({ error: 'Zu viele Versuche. Bitte warte eine Minute.' });
+  if (!checkRateLimit(ip)) return res.status(429).json({ error: 'Zu viele Anfragen. Bitte warte.' });
 
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
@@ -38,8 +47,27 @@ router.post('/login', (req, res) => {
   const db = getDb();
   const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
 
-  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
-    auditLog(user?.id || null, 'login_failed', email, ip, { reason: 'invalid_credentials' });
+  if (!user) {
+    auditLog(null, 'login_failed', email, ip, { reason: 'user_not_found' });
+    return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
+  }
+
+  // Check account lockout
+  if (user.locked_until && new Date(user.locked_until) > new Date()) {
+    const mins = Math.ceil((new Date(user.locked_until) - new Date()) / 60000);
+    auditLog(user.id, 'login_failed', email, ip, { reason: 'account_locked' });
+    return res.status(429).json({ error: `Konto gesperrt nach zu vielen Fehlversuchen. Noch ${mins} Minute(n).` });
+  }
+
+  if (!bcrypt.compareSync(password, user.password_hash)) {
+    const newAttempts = (user.login_attempts || 0) + 1;
+    const shouldLock = newAttempts >= 5;
+    const lockUntil = shouldLock
+      ? new Date(Date.now() + 15 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19)
+      : (user.locked_until || null);
+    db.prepare('UPDATE users SET login_attempts = ?, locked_until = ? WHERE id = ?').run(newAttempts, lockUntil, user.id);
+    auditLog(user.id, 'login_failed', email, ip, { reason: 'wrong_password', attempts: newAttempts });
+    if (shouldLock) return res.status(429).json({ error: 'Zu viele Fehlversuche. Konto für 15 Minuten gesperrt.' });
     return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
   }
 
@@ -48,12 +76,12 @@ router.post('/login', (req, res) => {
     return res.status(403).json({ error: 'Konto deaktiviert' });
   }
 
-  db.prepare("UPDATE users SET last_active = datetime('now') WHERE id = ?").run(user.id);
+  // Successful login — reset lockout
+  db.prepare("UPDATE users SET last_active = datetime('now'), login_attempts = 0, locked_until = NULL WHERE id = ?").run(user.id);
   auditLog(user.id, 'login', email, ip);
 
-  const { token } = signToken(user.id, user.role);
-  res.json({
-    token,
+  const { token } = signSessionToken(user.id, user.role);
+  res.cookie('session', token, SESSION_COOKIE_OPTS).json({
     user: { id: user.id, email: user.email, name: user.name, company: user.company, role: user.role },
     force_password_change: !!user.force_password_change
   });
@@ -61,7 +89,7 @@ router.post('/login', (req, res) => {
 
 router.post('/register', (req, res) => {
   const ip = getIp(req);
-  if (!checkRateLimit(ip)) return res.status(429).json({ error: 'Zu viele Versuche. Bitte warte eine Minute.' });
+  if (!checkRateLimit(ip)) return res.status(429).json({ error: 'Zu viele Versuche. Bitte warte.' });
 
   const { email, password, name, company } = req.body;
   if (!email || !password || !name) return res.status(400).json({ error: 'Email, Passwort und Name erforderlich' });
@@ -74,17 +102,26 @@ router.post('/register', (req, res) => {
 
   const hash = bcrypt.hashSync(password, 12);
   const id = uuidv4();
-  db.prepare('INSERT INTO users (id, email, name, company, password_hash) VALUES (?, ?, ?, ?, ?)')
-    .run(id, email, name, company || '', hash);
-
+  db.prepare('INSERT INTO users (id, email, name, company, password_hash) VALUES (?, ?, ?, ?, ?)').run(id, email, name, company || '', hash);
   auditLog(id, 'register', email, ip);
 
-  const { token } = signToken(id, 'user');
-  res.json({ token, user: { id, email, name, company: company || '', role: 'user' } });
+  const { token } = signSessionToken(id, 'user');
+  res.cookie('session', token, SESSION_COOKIE_OPTS).json({
+    user: { id, email, name, company: company || '', role: 'user' },
+    force_password_change: false
+  });
 });
 
 router.get('/me', authenticateToken, (req, res) => {
   res.json({ user: req.user });
+});
+
+// Dedicated long-lived agent token (separate from session)
+router.get('/agent-token', authenticateToken, (req, res) => {
+  const jti = crypto.randomBytes(16).toString('hex');
+  const agentToken = jwt.sign({ userId: req.user.id, role: req.user.role, jti, type: 'agent' }, JWT_SECRET, { expiresIn: '30d' });
+  auditLog(req.user.id, 'agent_token_generated', null, getIp(req));
+  res.json({ token: agentToken });
 });
 
 // Change password
@@ -106,7 +143,7 @@ router.post('/change-password', authenticateToken, (req, res) => {
   res.json({ success: true });
 });
 
-// Logout — revoke current token
+// Logout — revoke token and clear cookie
 router.post('/logout', authenticateToken, (req, res) => {
   if (req.tokenJti && req.tokenExp) {
     const expiresAt = new Date(req.tokenExp * 1000).toISOString().replace('T', ' ').slice(0, 19);
@@ -115,7 +152,7 @@ router.post('/logout', authenticateToken, (req, res) => {
     } catch {}
   }
   auditLog(req.user.id, 'logout', null, getIp(req));
-  res.json({ success: true });
+  res.clearCookie('session', { path: '/' }).json({ success: true });
 });
 
 module.exports = router;

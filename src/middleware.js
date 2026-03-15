@@ -3,16 +3,25 @@ const { getDb } = require('./database');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'cortex-secret-key-change-me';
 
-function authenticateToken(req, res, next) {
+function getTokenFromRequest(req) {
+  // Try httpOnly session cookie first
+  const cookieHeader = req.headers.cookie || '';
+  const sessionMatch = cookieHeader.match(/(?:^|;\s*)session=([^;]+)/);
+  if (sessionMatch) {
+    try { return decodeURIComponent(sessionMatch[1]); } catch {}
+  }
+  // Fallback: Authorization header (for desktop agent and API clients)
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  return authHeader && authHeader.split(' ')[1];
+}
 
+function authenticateToken(req, res, next) {
+  const token = getTokenFromRequest(req);
   if (!token) return res.status(401).json({ error: 'Token required' });
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
 
-    // Check if token has been revoked
     if (decoded.jti) {
       const blacklisted = getDb().prepare('SELECT jti FROM token_blacklist WHERE jti = ?').get(decoded.jti);
       if (blacklisted) return res.status(401).json({ error: 'Token revoked' });
@@ -35,4 +44,4 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { authenticateToken, requireAdmin, JWT_SECRET };
+module.exports = { authenticateToken, requireAdmin, JWT_SECRET, getTokenFromRequest };
