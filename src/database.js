@@ -21,6 +21,7 @@ function init() {
       role TEXT DEFAULT 'user' CHECK(role IN ('admin', 'user')),
       password_hash TEXT NOT NULL,
       is_active INTEGER DEFAULT 1,
+      force_password_change INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       last_active TEXT DEFAULT (datetime('now'))
     );
@@ -60,26 +61,48 @@ function init() {
       FOREIGN KEY (user_id) REFERENCES users(id),
       UNIQUE(user_id, month)
     );
+
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts TEXT DEFAULT (datetime('now')),
+      user_id TEXT,
+      action TEXT NOT NULL,
+      target TEXT,
+      ip TEXT,
+      detail TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS token_blacklist (
+      jti TEXT PRIMARY KEY,
+      expires_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_token_usage_user ON token_usage(user_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_ts ON audit_log(ts);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id);
   `);
+
+  // Migrate existing DBs: add new columns if they don't exist
+  const cols = db.pragma('table_info(users)').map(c => c.name);
+  if (!cols.includes('force_password_change')) {
+    db.exec('ALTER TABLE users ADD COLUMN force_password_change INTEGER DEFAULT 0');
+  }
+
+  // Clean up expired blacklisted tokens periodically
+  db.prepare("DELETE FROM token_blacklist WHERE expires_at < datetime('now')").run();
 
   // Create default admin if not exists
   const adminExists = db.prepare('SELECT id FROM users WHERE role = ?').get('admin');
   if (!adminExists) {
-    const hash = bcrypt.hashSync('admin123', 10);
+    const hash = bcrypt.hashSync('admin123', 12);
     db.prepare(`
-      INSERT INTO users (id, email, name, company, role, password_hash)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO users (id, email, name, company, role, password_hash, force_password_change)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
     `).run(uuidv4(), 'admin@cortex.local', 'Admin', 'CORTEX', 'admin', hash);
-  }
-
-  // Create demo user if not exists
-  const userExists = db.prepare('SELECT id FROM users WHERE role = ?').get('user');
-  if (!userExists) {
-    const hash = bcrypt.hashSync('user123', 10);
-    db.prepare(`
-      INSERT INTO users (id, email, name, company, role, password_hash)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(uuidv4(), 'demo@company.com', 'Demo User', 'Demo GmbH', 'user', hash);
+    console.log('\x1b[33m[CORTEX]\x1b[0m Standard-Admin erstellt: admin@cortex.local / admin123 — Passwort beim ersten Login ändern!');
   }
 
   return db;
@@ -90,4 +113,11 @@ function getDb() {
   return db;
 }
 
-module.exports = { init, getDb };
+function auditLog(userId, action, target, ip, detail) {
+  try {
+    getDb().prepare('INSERT INTO audit_log (user_id, action, target, ip, detail) VALUES (?, ?, ?, ?, ?)')
+      .run(userId || null, action, target || null, ip || null, detail ? JSON.stringify(detail) : null);
+  } catch {}
+}
+
+module.exports = { init, getDb, auditLog };

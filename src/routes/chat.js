@@ -112,21 +112,47 @@ router.get('/sessions', (req, res) => {
   res.json(sessions);
 });
 
-// Get session messages
+// Get session messages (only own sessions)
 router.get('/session/:id/messages', (req, res) => {
   const db = getDb();
+  const session = db.prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  if (!session) return res.status(404).json({ error: 'Session nicht gefunden' });
   const messages = db.prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY created_at ASC')
     .all(req.params.id);
   res.json(messages);
 });
 
+function sanitizePcInfo(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const allowed = ['hostname','platform','arch','release','totalMem','freeMem','cpus','cpuModel','uptime','user','stats'];
+  const safe = {};
+  for (const k of allowed) {
+    if (raw[k] !== undefined) {
+      if (k === 'stats' && typeof raw[k] === 'object') {
+        safe[k] = {};
+        for (const sk of ['cpu','memPct','memUsed','memTotal','freeMem','disk','platform','hostname']) {
+          if (raw[k][sk] !== undefined) safe[k][sk] = String(raw[k][sk]).slice(0, 200);
+        }
+      } else {
+        safe[k] = String(raw[k]).slice(0, 200);
+      }
+    }
+  }
+  return safe;
+}
+
 // Send message (streaming)
 router.post('/message/stream', async (req, res) => {
-  const { sessionId, content, tier = 'medium', pcInfo } = req.body;
+  const { sessionId, content, tier = 'medium', pcInfo: rawPcInfo } = req.body;
+  const pcInfo = sanitizePcInfo(rawPcInfo);
   if (!sessionId || !content) return res.status(400).json({ error: 'Session ID and content required' });
 
   const model = MODEL_MAP[tier] || MODEL_MAP.medium;
   const db = getDb();
+
+  // Verify session belongs to user
+  const session = db.prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?').get(sessionId, req.user.id);
+  if (!session) return res.status(404).json({ error: 'Session nicht gefunden' });
 
   // Save user message
   const userMsgId = uuidv4();
@@ -195,18 +221,22 @@ router.post('/message/stream', async (req, res) => {
     res.end();
   } catch (err) {
     console.error('AI Error:', err.message);
-    send('error', { error: err.message });
+    send('error', { error: 'AI service temporarily unavailable. Please try again.' });
     res.end();
   }
 });
 
 // Send message (non-streaming fallback)
 router.post('/message', async (req, res) => {
-  const { sessionId, content, tier = 'medium', pcInfo } = req.body;
+  const { sessionId, content, tier = 'medium', pcInfo: rawPcInfo } = req.body;
+  const pcInfo = sanitizePcInfo(rawPcInfo);
   if (!sessionId || !content) return res.status(400).json({ error: 'Session ID and content required' });
 
   const model = MODEL_MAP[tier] || MODEL_MAP.medium;
   const db = getDb();
+
+  const session = db.prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?').get(sessionId, req.user.id);
+  if (!session) return res.status(404).json({ error: 'Session nicht gefunden' });
 
   const userMsgId = uuidv4();
   db.prepare('INSERT INTO messages (id, session_id, user_id, role, content, model) VALUES (?, ?, ?, ?, ?, ?)')
@@ -254,7 +284,7 @@ router.post('/message', async (req, res) => {
     res.json({ message: cleanContent, riskLevel, changes, tokensUsed, model: model.name, tier, id: assistMsgId });
   } catch (err) {
     console.error('AI Error:', err.message);
-    res.status(500).json({ error: 'AI service error: ' + err.message });
+    res.status(500).json({ error: 'AI service temporarily unavailable. Please try again.' });
   }
 });
 

@@ -11,10 +11,19 @@ function authenticateToken(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+
+    // Check if token has been revoked
+    if (decoded.jti) {
+      const blacklisted = getDb().prepare('SELECT jti FROM token_blacklist WHERE jti = ?').get(decoded.jti);
+      if (blacklisted) return res.status(401).json({ error: 'Token revoked' });
+    }
+
     const db = getDb();
-    const user = db.prepare('SELECT id, email, name, company, role, is_active FROM users WHERE id = ?').get(decoded.userId);
+    const user = db.prepare('SELECT id, email, name, company, role, is_active, force_password_change FROM users WHERE id = ?').get(decoded.userId);
     if (!user || !user.is_active) return res.status(403).json({ error: 'Access denied' });
     req.user = user;
+    req.tokenJti = decoded.jti || null;
+    req.tokenExp = decoded.exp || null;
     next();
   } catch {
     return res.status(403).json({ error: 'Invalid token' });
