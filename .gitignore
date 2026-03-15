@@ -1,5 +1,9 @@
 node_modules/
 .env
-cortex.db
+*.db
 *.db-wal
 *.db-shm
+cortex-agent/dist/
+cortex-agent/deps/
+cortex-agent/node_modules/
+.cortex-agent/

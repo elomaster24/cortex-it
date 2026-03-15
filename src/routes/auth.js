@@ -20,7 +20,7 @@ router.post('/login', (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  db.prepare('UPDATE users SET last_active = datetime("now") WHERE id = ?').run(user.id);
+  db.prepare("UPDATE users SET last_active = datetime('now') WHERE id = ?").run(user.id);
 
   const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
   res.json({

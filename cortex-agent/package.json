@@ -1,0 +1,20 @@
+{
+  "name": "cortex-agent",
+  "version": "1.0.0",
+  "description": "CORTEX Desktop Agent",
+  "main": "agent.js",
+  "bin": "agent.js",
+  "scripts": {
+    "build:win":   "pkg agent.js --target node18-win-x64   --output dist/CORTEX-Agent-Windows.exe",
+    "build:mac":   "pkg agent.js --target node18-macos-x64 --output dist/CORTEX-Agent-Mac",
+    "build:linux": "pkg agent.js --target node18-linux-x64 --output dist/CORTEX-Agent-Linux",
+    "build:all":   "npm run build:win && npm run build:mac && npm run build:linux"
+  },
+  "pkg": {
+    "assets": [],
+    "targets": ["node18-win-x64", "node18-macos-x64", "node18-linux-x64"]
+  },
+  "dependencies": {
+    "socket.io-client": "^4.7.4"
+  }
+}
