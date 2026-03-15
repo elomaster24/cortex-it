@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CORTEX - IT Support Agent</title>
+  <link rel="icon" href="/assets/logo.svg" type="image/svg+xml">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-primary: #0a0e1a;
+      --bg-secondary: #111827;
+      --bg-card: #1a1f35;
+      --bg-hover: #252b45;
+      --border: #2a3050;
+      --text-primary: #e4e7f1;
+      --text-secondary: #8892b0;
+      --accent: #00d4ff;
+      --accent2: #7b2ff7;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Login ── */
+    .login-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: radial-gradient(ellipse at center, #111827 0%, #0a0e1a 70%);
+    }
+
+    .login-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 48px;
+      width: 420px;
+      text-align: center;
+    }
+
+    .login-box img { width: 64px; margin-bottom: 16px; }
+    .login-box h1 {
+      font-size: 28px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 4px;
+    }
+    .login-box .subtitle { color: var(--text-secondary); margin-bottom: 8px; font-size: 14px; }
+    .login-box .desc { color: var(--text-secondary); margin-bottom: 32px; font-size: 13px; line-height: 1.5; }
+
+    .form-group { margin-bottom: 16px; text-align: left; }
+    .form-group label { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
+    .form-group input {
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-group input:focus { border-color: var(--accent); }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .register-link { margin-top: 16px; font-size: 13px; color: var(--text-secondary); }
+    .register-link a { color: var(--accent); cursor: pointer; text-decoration: none; }
+
+    .error-msg { color: var(--danger); font-size: 13px; margin-top: 12px; }
+
+    /* ── Chat App ── */
+    .app { display: none; height: 100vh; flex-direction: column; }
+    .app.active { display: flex; }
+
+    /* ── Top Bar ── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      padding: 12px 24px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    .topbar-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .topbar-brand img { width: 32px; }
+    .topbar-brand h1 {
+      font-size: 18px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .topbar-center { flex: 1; display: flex; align-items: center; gap: 16px; justify-content: center; }
+
+    .tier-selector {
+      display: flex;
+      background: var(--bg-primary);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .tier-btn {
+      padding: 8px 20px;
+      border: none;
+      background: none;
+      color: var(--text-secondary);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tier-btn:hover { color: var(--text-primary); }
+    .tier-btn.active { background: var(--bg-card); color: var(--text-primary); }
+    .tier-btn.active.low { color: var(--success); }
+    .tier-btn.active.medium { color: var(--accent); }
+    .tier-btn.active.ultra { color: var(--accent2); }
+    .tier-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .tier-dot.low { background: var(--success); }
+    .tier-dot.medium { background: var(--accent); }
+    .tier-dot.ultra { background: var(--accent2); }
+
+    .pc-access {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-primary);
+      font-size: 13px;
+    }
+    .pc-toggle {
+      width: 40px;
+      height: 22px;
+      border-radius: 11px;
+      background: var(--border);
+      position: relative;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .pc-toggle.active { background: var(--success); }
+    .pc-toggle::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: white;
+      transition: transform 0.2s;
+    }
+    .pc-toggle.active::after { transform: translateX(18px); }
+
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    .user-info { font-size: 13px; color: var(--text-secondary); }
+    .logout-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-secondary);
+      padding: 6px 12px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .logout-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+    /* ── Session Sidebar ── */
+    .chat-layout { display: flex; flex: 1; overflow: hidden; }
+
+    .session-sidebar {
+      width: 260px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .new-session-btn {
+      margin: 16px;
+      padding: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .new-session-btn:hover { opacity: 0.9; }
+
+    .session-list { flex: 1; overflow-y: auto; padding: 0 8px; }
+    .session-item {
+      padding: 12px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-bottom: 4px;
+      transition: background 0.2s;
+    }
+    .session-item:hover { background: var(--bg-hover); }
+    .session-item.active { background: rgba(0,212,255,0.1); }
+    .session-item .title { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .session-item .meta { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+
+    /* ── Chat Area ── */
+    .chat-area { flex: 1; display: flex; flex-direction: column; }
+
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      scroll-behavior: smooth;
+    }
+
+    .welcome {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      text-align: center;
+      color: var(--text-secondary);
+    }
+    .welcome img { width: 80px; opacity: 0.6; margin-bottom: 24px; }
+    .welcome h2 { font-size: 22px; color: var(--text-primary); margin-bottom: 8px; }
+    .welcome p { max-width: 400px; line-height: 1.6; font-size: 14px; }
+
+    .welcome-suggestions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 32px;
+      max-width: 520px;
+    }
+    .suggestion {
+      padding: 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      text-align: left;
+      transition: border-color 0.2s;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .suggestion:hover { border-color: var(--accent); }
+    .suggestion .icon { font-size: 20px; margin-bottom: 8px; }
+
+    .message {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      max-width: 800px;
+    }
+
+    .msg-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .msg-avatar.user { background: rgba(0,212,255,0.15); color: var(--accent); }
+    .msg-avatar.assistant { background: rgba(123,47,247,0.15); color: var(--accent2); }
+
+    .msg-content { flex: 1; }
+    .msg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .msg-name { font-size: 13px; font-weight: 600; }
+    .msg-time { font-size: 11px; color: var(--text-secondary); }
+    .msg-model { font-size: 10px; padding: 2px 8px; border-radius: 4px; }
+    .msg-model.Haiku { background: rgba(16,185,129,0.15); color: var(--success); }
+    .msg-model.Sonnet { background: rgba(0,212,255,0.15); color: var(--accent); }
+    .msg-model.Opus { background: rgba(123,47,247,0.15); color: var(--accent2); }
+
+    .msg-body {
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text-primary);
+    }
+    .msg-body code {
+      background: var(--bg-secondary);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+    }
+    .msg-body pre {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin: 12px 0;
+      overflow-x: auto;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .risk-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-top: 8px;
+    }
+    .risk-indicator.none { background: rgba(136,146,176,0.1); color: var(--text-secondary); }
+    .risk-indicator.low { background: rgba(16,185,129,0.1); color: var(--success); }
+    .risk-indicator.medium { background: rgba(245,158,11,0.1); color: var(--warning); }
+    .risk-indicator.high { background: rgba(249,115,22,0.1); color: #f97316; }
+    .risk-indicator.critical { background: rgba(239,68,68,0.15); color: var(--danger); }
+
+    .risk-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .risk-dot.none { background: var(--text-secondary); }
+    .risk-dot.low { background: var(--success); }
+    .risk-dot.medium { background: var(--warning); }
+    .risk-dot.high { background: #f97316; }
+    .risk-dot.critical { background: var(--danger); }
+
+    .changes-box {
+      margin-top: 8px;
+      padding: 10px 14px;
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      border-left: 3px solid var(--accent2);
+    }
+    .changes-box .title { font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .changes-box li { font-size: 13px; margin-left: 16px; margin-bottom: 4px; color: var(--text-secondary); }
+
+    /* ── Input Area ── */
+    .input-area {
+      padding: 16px 24px 24px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-secondary);
+    }
+
+    .input-wrapper {
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+      max-width: 800px;
+    }
+
+    .input-wrapper textarea {
+      flex: 1;
+      padding: 14px 18px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text-primary);
+      font-size: 14px;
+      font-family: inherit;
+      resize: none;
+      outline: none;
+      min-height: 48px;
+      max-height: 200px;
+      transition: border-color 0.2s;
+    }
+    .input-wrapper textarea:focus { border-color: var(--accent); }
+    .input-wrapper textarea::placeholder { color: var(--text-secondary); }
+
+    .send-btn {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border: none;
+      border-radius: 12px;
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: opacity 0.2s;
+    }
+    .send-btn:hover { opacity: 0.9; }
+    .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .typing {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 0;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .typing.active { display: flex; }
+    .typing-dots { display: flex; gap: 4px; }
+    .typing-dots span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: bounce 1.4s infinite ease-in-out;
+    }
+    .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0); opacity: 0.4; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+
+    .input-hint {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 8px;
+      max-width: 800px;
+    }
+
+    @media (max-width: 768px) {
+      .session-sidebar { display: none; }
+      .topbar-center { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Login Screen -->
+<div class="login-container" id="loginScreen">
+  <div class="login-box">
+    <img src="/assets/logo.svg" alt="CORTEX">
+    <h1>CORTEX</h1>
+    <div class="subtitle">IT Support Agent</div>
+    <div class="desc">Dein digitaler IT-Mitarbeiter. Beschreibe dein Problem und CORTEX hilft dir, es zu loesen.</div>
+
+    <div id="loginForm">
+      <div class="form-group">
+        <label>E-Mail</label>
+        <input type="email" id="loginEmail" placeholder="deine@email.de">
+      </div>
+      <div class="form-group">
+        <label>Passwort</label>
+        <input type="password" id="loginPassword" placeholder="Passwort">
+      </div>
+      <button class="btn" onclick="login()">Anmelden</button>
+      <div class="register-link">Noch kein Konto? <a onclick="showRegister()">Registrieren</a></div>
+    </div>
+
+    <div id="registerForm" style="display:none;">
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" id="regName" placeholder="Dein Name">
+      </div>
+      <div class="form-group">
+        <label>E-Mail</label>
+        <input type="email" id="regEmail" placeholder="deine@email.de">
+      </div>
+      <div class="form-group">
+        <label>Passwort</label>
+        <input type="password" id="regPassword" placeholder="Passwort">
+      </div>
+      <div class="form-group">
+        <label>Firma</label>
+        <input type="text" id="regCompany" placeholder="Firma GmbH">
+      </div>
+      <button class="btn" onclick="register()">Registrieren</button>
+      <div class="register-link"><a onclick="showLogin()">Zurueck zum Login</a></div>
+    </div>
+
+    <div class="error-msg" id="authError"></div>
+  </div>
+</div>
+
+<!-- Chat App -->
+<div class="app" id="app">
+  <div class="topbar">
+    <div class="topbar-brand">
+      <img src="/assets/logo.svg" alt="CORTEX">
+      <h1>CORTEX</h1>
+    </div>
+    <div class="topbar-center">
+      <div class="tier-selector">
+        <button class="tier-btn low" onclick="setTier('low')" data-tier="low">
+          <span class="tier-dot low"></span> Low <span style="font-size:10px;color:var(--text-secondary)">Haiku</span>
+        </button>
+        <button class="tier-btn medium active" onclick="setTier('medium')" data-tier="medium">
+          <span class="tier-dot medium"></span> Medium <span style="font-size:10px;color:var(--text-secondary)">Sonnet</span>
+        </button>
+        <button class="tier-btn ultra" onclick="setTier('ultra')" data-tier="ultra">
+          <span class="tier-dot ultra"></span> Ultra <span style="font-size:10px;color:var(--text-secondary)">Opus</span>
+        </button>
+      </div>
+      <div class="pc-access">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        PC Zugriff
+        <div class="pc-toggle" id="pcToggle" onclick="togglePcAccess()"></div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="user-info" id="userInfo">User</span>
+      <button class="logout-btn" onclick="logout()">Abmelden</button>
+    </div>
+  </div>
+
+  <div class="chat-layout">
+    <div class="session-sidebar">
+      <button class="new-session-btn" onclick="newSession()">+ Neue Session</button>
+      <div class="session-list" id="sessionList"></div>
+    </div>
+
+    <div class="chat-area">
+      <div class="messages" id="messages">
+        <div class="welcome">
+          <img src="/assets/logo.svg" alt="CORTEX">
+          <h2>Willkommen bei CORTEX</h2>
+          <p>Beschreibe dein IT-Problem und ich helfe dir, es zu loesen. Aktiviere den PC-Zugriff, damit ich direkt auf deinem Computer arbeiten kann.</p>
+          <div class="welcome-suggestions">
+            <div class="suggestion" onclick="useSuggestion('Mein WLAN verbindet sich nicht. Kannst du mir helfen?')">
+              <div class="icon">&#128246;</div>
+              WLAN verbindet sich nicht
+            </div>
+            <div class="suggestion" onclick="useSuggestion('Mein Drucker wird nicht erkannt. Was kann ich tun?')">
+              <div class="icon">&#128424;</div>
+              Drucker wird nicht erkannt
+            </div>
+            <div class="suggestion" onclick="useSuggestion('Outlook synchronisiert meine E-Mails nicht mehr.')">
+              <div class="icon">&#128231;</div>
+              Outlook Synchronisation
+            </div>
+            <div class="suggestion" onclick="useSuggestion('iCloud Drive synchronisiert nicht richtig auf meinem PC.')">
+              <div class="icon">&#9729;&#65039;</div>
+              iCloud Probleme
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="input-area">
+        <div class="typing" id="typing">
+          <div class="typing-dots"><span></span><span></span><span></span></div>
+          CORTEX analysiert...
+        </div>
+        <div class="input-wrapper">
+          <textarea id="chatInput" placeholder="Beschreibe dein IT-Problem..." rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19V5m0 0l-7 7m7-7l7 7"/></svg>
+          </button>
+        </div>
+        <div class="input-hint">
+          <span id="tierHint">Modell: Sonnet (Medium) &middot; </span>
+          <span id="pcHint">PC-Zugriff: Deaktiviert</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let token = localStorage.getItem('cortex_user_token');
+let currentUser = null;
+let currentSession = null;
+let currentTier = 'medium';
+let pcAccess = false;
+let sending = false;
+
+async function api(path, opts = {}) {
+  const res = await fetch(API + path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, ...opts.headers }
+  });
+  if (res.status === 401 || res.status === 403) { logout(); throw new Error('Unauthorized'); }
+  return res.json();
+}
+
+function showLogin() { document.getElementById('loginForm').style.display = 'block'; document.getElementById('registerForm').style.display = 'none'; document.getElementById('authError').textContent = ''; }
+function showRegister() { document.getElementById('loginForm').style.display = 'none'; document.getElementById('registerForm').style.display = 'block'; document.getElementById('authError').textContent = ''; }
+
+async function login() {
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+  if (!email || !password) { document.getElementById('authError').textContent = 'Bitte alle Felder ausfuellen'; return; }
+  try {
+    const data = await fetch(API + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) }).then(r => r.json());
+    if (data.error) { document.getElementById('authError').textContent = data.error; return; }
+    token = data.token;
+    currentUser = data.user;
+    localStorage.setItem('cortex_user_token', token);
+    showApp();
+  } catch (e) { document.getElementById('authError').textContent = 'Verbindungsfehler'; }
+}
+
+async function register() {
+  const name = document.getElementById('regName').value;
+  const email = document.getElementById('regEmail').value;
+  const password = document.getElementById('regPassword').value;
+  const company = document.getElementById('regCompany').value;
+  if (!name || !email || !password) { document.getElementById('authError').textContent = 'Bitte alle Pflichtfelder ausfuellen'; return; }
+  try {
+    const data = await fetch(API + '/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, password, company }) }).then(r => r.json());
+    if (data.error) { document.getElementById('authError').textContent = data.error; return; }
+    token = data.token;
+    currentUser = data.user;
+    localStorage.setItem('cortex_user_token', token);
+    showApp();
+  } catch (e) { document.getElementById('authError').textContent = 'Verbindungsfehler'; }
+}
+
+function logout() {
+  localStorage.removeItem('cortex_user_token');
+  token = null;
+  currentUser = null;
+  currentSession = null;
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('app').classList.remove('active');
+}
+
+async function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').classList.add('active');
+
+  if (!currentUser) {
+    try {
+      const data = await api('/api/auth/me');
+      currentUser = data.user;
+    } catch { logout(); return; }
+  }
+
+  document.getElementById('userInfo').textContent = currentUser.name;
+  loadSessions();
+}
+
+async function loadSessions() {
+  try {
+    const sessions = await api('/api/chat/sessions');
+    document.getElementById('sessionList').innerHTML = sessions.map(s => `
+      <div class="session-item ${currentSession === s.id ? 'active' : ''}" onclick="loadSession('${s.id}')">
+        <div class="title">${escHtml((s.first_message || 'Neue Session').substring(0, 40))}</div>
+        <div class="meta">${s.message_count} Nachrichten &middot; ${s.model_used || 'Sonnet'}</div>
+      </div>
+    `).join('') || '<div style="padding:16px;font-size:13px;color:var(--text-secondary);text-align:center;">Keine Sessions</div>';
+  } catch (e) { console.error(e); }
+}
+
+async function newSession() {
+  try {
+    const data = await api('/api/chat/session', { method: 'POST' });
+    currentSession = data.sessionId;
+    document.getElementById('messages').innerHTML = `
+      <div class="welcome">
+        <img src="/assets/logo.svg" alt="CORTEX">
+        <h2>Neue Session</h2>
+        <p>Beschreibe dein IT-Problem und ich helfe dir.</p>
+        <div class="welcome-suggestions">
+          <div class="suggestion" onclick="useSuggestion('Mein WLAN verbindet sich nicht.')"><div class="icon">&#128246;</div>WLAN Problem</div>
+          <div class="suggestion" onclick="useSuggestion('Drucker wird nicht erkannt.')"><div class="icon">&#128424;</div>Drucker Problem</div>
+          <div class="suggestion" onclick="useSuggestion('Outlook funktioniert nicht.')"><div class="icon">&#128231;</div>Outlook Hilfe</div>
+          <div class="suggestion" onclick="useSuggestion('PC ist sehr langsam.')"><div class="icon">&#128187;</div>Performance</div>
+        </div>
+      </div>`;
+    loadSessions();
+  } catch (e) { console.error(e); }
+}
+
+async function loadSession(id) {
+  currentSession = id;
+  try {
+    const messages = await api(`/api/chat/session/${id}/messages`);
+    const container = document.getElementById('messages');
+
+    if (messages.length === 0) {
+      container.innerHTML = '<div class="welcome"><img src="/assets/logo.svg"><h2>Session bereit</h2><p>Stelle deine Frage.</p></div>';
+    } else {
+      container.innerHTML = messages.map(m => renderMessage(m)).join('');
+      container.scrollTop = container.scrollHeight;
+    }
+    loadSessions();
+  } catch (e) { console.error(e); }
+}
+
+function renderMessage(m) {
+  const isUser = m.role === 'user';
+  const initial = isUser ? (currentUser?.name?.[0] || 'U') : 'C';
+  let changesHtml = '';
+  if (!isUser && m.changes_made) {
+    try {
+      const changes = JSON.parse(m.changes_made);
+      if (changes.length > 0) {
+        changesHtml = `<div class="changes-box"><div class="title">Aenderungen</div><ul>${changes.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul></div>`;
+      }
+    } catch {}
+  }
+
+  const riskHtml = !isUser && m.risk_level && m.risk_level !== 'none'
+    ? `<div class="risk-indicator ${m.risk_level}"><span class="risk-dot ${m.risk_level}"></span>Risiko: ${m.risk_level.toUpperCase()}</div>`
+    : '';
+
+  return `
+    <div class="message">
+      <div class="msg-avatar ${isUser ? 'user' : 'assistant'}">${initial}</div>
+      <div class="msg-content">
+        <div class="msg-header">
+          <span class="msg-name">${isUser ? 'Du' : 'CORTEX'}</span>
+          ${m.model ? `<span class="msg-model ${m.model}">${m.model}</span>` : ''}
+          <span class="msg-time">${formatTime(m.created_at)}</span>
+        </div>
+        <div class="msg-body">${formatContent(m.content)}</div>
+        ${riskHtml}
+        ${changesHtml}
+      </div>
+    </div>`;
+}
+
+function formatContent(text) {
+  if (!text) return '';
+  let html = escHtml(text);
+  // Code blocks
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Bold
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  // Line breaks
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+
+async function sendMessage() {
+  if (sending) return;
+  const input = document.getElementById('chatInput');
+  const content = input.value.trim();
+  if (!content) return;
+
+  if (!currentSession) await newSession();
+
+  sending = true;
+  input.value = '';
+  autoResize(input);
+  document.getElementById('sendBtn').disabled = true;
+
+  // Remove welcome screen
+  const welcome = document.querySelector('.welcome');
+  if (welcome) welcome.remove();
+
+  // Show user message
+  const container = document.getElementById('messages');
+  container.innerHTML += renderMessage({ role: 'user', content, created_at: new Date().toISOString() });
+  container.scrollTop = container.scrollHeight;
+
+  // Show typing
+  document.getElementById('typing').classList.add('active');
+
+  try {
+    const data = await api('/api/chat/message', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId: currentSession, content, tier: currentTier })
+    });
+
+    document.getElementById('typing').classList.remove('active');
+
+    container.innerHTML += renderMessage({
+      role: 'assistant',
+      content: data.message,
+      model: data.model,
+      risk_level: data.riskLevel,
+      changes_made: JSON.stringify(data.changes),
+      created_at: new Date().toISOString()
+    });
+    container.scrollTop = container.scrollHeight;
+    loadSessions();
+  } catch (e) {
+    document.getElementById('typing').classList.remove('active');
+    container.innerHTML += `<div class="message"><div class="msg-avatar assistant">!</div><div class="msg-content"><div class="msg-body" style="color:var(--danger)">Fehler: ${escHtml(e.message)}</div></div></div>`;
+  }
+
+  sending = false;
+  document.getElementById('sendBtn').disabled = false;
+  input.focus();
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+}
+
+function setTier(tier) {
+  currentTier = tier;
+  document.querySelectorAll('.tier-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-tier="${tier}"]`).classList.add('active');
+  const names = { low: 'Haiku (Low)', medium: 'Sonnet (Medium)', ultra: 'Opus (Ultra)' };
+  document.getElementById('tierHint').textContent = `Modell: ${names[tier]} \u00b7 `;
+}
+
+function togglePcAccess() {
+  pcAccess = !pcAccess;
+  document.getElementById('pcToggle').classList.toggle('active', pcAccess);
+  document.getElementById('pcHint').textContent = `PC-Zugriff: ${pcAccess ? 'Aktiviert' : 'Deaktiviert'}`;
+}
+
+function useSuggestion(text) {
+  document.getElementById('chatInput').value = text;
+  sendMessage();
+}
+
+function escHtml(str) { const d = document.createElement('div'); d.textContent = str || ''; return d.innerHTML; }
+function formatTime(d) { if (!d) return ''; try { return new Date(d.includes('Z') ? d : d + 'Z').toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; } }
+
+// Init
+if (token) { showApp(); }
+</script>
+</body>
+</html>
