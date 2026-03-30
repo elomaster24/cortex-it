@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CORTEX - Auto Bewerbungen</title>
+<style>
+:root {
+  --bg: #0a0f1a;
+  --surface: #111827;
+  --surface2: #1a2332;
+  --border: #1e3a5f;
+  --accent: #00e676;
+  --accent2: #00bcd4;
+  --danger: #ff5252;
+  --warn: #ffab40;
+  --text: #e0e0e0;
+  --text2: #8899aa;
+  --radius: 8px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+a { color:var(--accent); text-decoration:none; }
+
+/* Login */
+#loginScreen { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+.login-box { background:var(--surface); padding:2rem; border-radius:var(--radius); border:1px solid var(--border); width:360px; }
+.login-box h1 { color:var(--accent); font-size:1.4rem; margin-bottom:1.5rem; text-align:center; }
+.login-box input { width:100%; padding:10px 12px; margin-bottom:12px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); font-size:14px; }
+.login-box input:focus { outline:none; border-color:var(--accent); }
+.login-box button { width:100%; padding:10px; background:var(--accent); color:#000; border:none; border-radius:var(--radius); font-weight:600; cursor:pointer; font-size:14px; }
+.login-box button:hover { opacity:0.9; }
+.login-error { color:var(--danger); font-size:13px; margin-bottom:8px; display:none; }
+
+/* Layout */
+#app { display:none; }
+.layout { display:flex; min-height:100vh; }
+.sidebar { width:220px; background:var(--surface); border-right:1px solid var(--border); padding:1rem 0; flex-shrink:0; }
+.sidebar h2 { color:var(--accent); font-size:1rem; padding:0 1rem 1rem; border-bottom:1px solid var(--border); margin-bottom:0.5rem; }
+.sidebar .nav-item { display:block; padding:10px 1rem; color:var(--text2); cursor:pointer; font-size:14px; transition:all .15s; border-left:3px solid transparent; }
+.sidebar .nav-item:hover { background:var(--surface2); color:var(--text); }
+.sidebar .nav-item.active { color:var(--accent); border-left-color:var(--accent); background:var(--surface2); }
+.sidebar .nav-status { padding:1rem; margin-top:auto; border-top:1px solid var(--border); font-size:12px; color:var(--text2); }
+.main { flex:1; padding:1.5rem; overflow-y:auto; max-height:100vh; }
+.main h1 { font-size:1.3rem; margin-bottom:1rem; }
+
+/* Cards */
+.stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:1rem; margin-bottom:1.5rem; }
+.stat-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1rem; }
+.stat-card .label { font-size:12px; color:var(--text2); text-transform:uppercase; }
+.stat-card .value { font-size:1.8rem; font-weight:700; color:var(--accent); margin-top:4px; }
+.stat-card .value.warn { color:var(--warn); }
+.stat-card .value.danger { color:var(--danger); }
+
+/* Forms */
+.form-group { margin-bottom:1rem; }
+.form-group label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
+.form-group input, .form-group textarea, .form-group select {
+  width:100%; padding:8px 12px; background:var(--bg); border:1px solid var(--border);
+  border-radius:var(--radius); color:var(--text); font-size:14px; font-family:inherit;
+}
+.form-group textarea { resize:vertical; min-height:80px; }
+.form-group input:focus, .form-group textarea:focus, .form-group select:focus { outline:none; border-color:var(--accent); }
+.form-row { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+
+.btn { padding:8px 16px; border:none; border-radius:var(--radius); font-size:14px; cursor:pointer; font-weight:600; transition:all .15s; }
+.btn-primary { background:var(--accent); color:#000; }
+.btn-primary:hover { opacity:0.9; }
+.btn-danger { background:var(--danger); color:#fff; }
+.btn-danger:hover { opacity:0.9; }
+.btn-secondary { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+.btn-secondary:hover { border-color:var(--accent); }
+.btn-sm { padding:4px 10px; font-size:12px; }
+
+/* Table */
+table { width:100%; border-collapse:collapse; margin-top:1rem; }
+th, td { padding:8px 12px; text-align:left; border-bottom:1px solid var(--border); font-size:13px; }
+th { color:var(--text2); font-weight:600; font-size:12px; text-transform:uppercase; }
+td a { color:var(--accent2); }
+
+/* Status badges */
+.badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+.badge-applied { background:#00e67633; color:#00e676; }
+.badge-found { background:#00bcd433; color:#00bcd4; }
+.badge-interview { background:#ffab4033; color:#ffab40; }
+.badge-rejected { background:#ff525233; color:#ff5252; }
+.badge-offer { background:#76ff0333; color:#76ff03; }
+.badge-viewed { background:#7c4dff33; color:#7c4dff; }
+.badge-withdrawn { background:#78909c33; color:#78909c; }
+
+/* Tags */
+.tag-input { display:flex; flex-wrap:wrap; gap:4px; padding:6px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); min-height:38px; align-items:center; }
+.tag-input:focus-within { border-color:var(--accent); }
+.tag-input input { border:none; background:none; color:var(--text); flex:1; min-width:100px; padding:2px 4px; outline:none; font-size:14px; }
+.tag { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; background:var(--accent); color:#000; border-radius:4px; font-size:12px; font-weight:600; }
+.tag .remove { cursor:pointer; opacity:0.7; }
+.tag .remove:hover { opacity:1; }
+
+/* Log viewer */
+.log-viewer { background:#000; border:1px solid var(--border); border-radius:var(--radius); padding:1rem; max-height:400px; overflow-y:auto; font-family:monospace; font-size:13px; line-height:1.6; }
+.log-viewer .log-info { color:#00e676; }
+.log-viewer .log-warn { color:#ffab40; }
+.log-viewer .log-error { color:#ff5252; }
+.log-viewer .log-time { color:#546e7a; margin-right:8px; }
+
+/* Pages */
+.page { display:none; }
+.page.active { display:block; }
+
+/* Toggle */
+.toggle { position:relative; width:44px; height:24px; display:inline-block; }
+.toggle input { opacity:0; width:0; height:0; }
+.toggle .slider { position:absolute; inset:0; background:var(--surface2); border-radius:12px; border:1px solid var(--border); cursor:pointer; transition:all .2s; }
+.toggle .slider:before { content:''; position:absolute; width:18px; height:18px; left:2px; top:2px; background:var(--text2); border-radius:50%; transition:all .2s; }
+.toggle input:checked + .slider { background:var(--accent); border-color:var(--accent); }
+.toggle input:checked + .slider:before { transform:translateX(20px); background:#000; }
+
+.search-control { display:flex; gap:1rem; align-items:center; margin-bottom:1.5rem; padding:1rem; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); }
+.pulse { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--accent); animation:pulse 1.5s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+.section { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1.5rem; margin-bottom:1.5rem; }
+.section h2 { font-size:1rem; margin-bottom:1rem; color:var(--accent); }
+
+.mt-1 { margin-top:0.5rem; }
+.mt-2 { margin-top:1rem; }
+.mb-2 { margin-bottom:1rem; }
+.text-muted { color:var(--text2); font-size:13px; }
+
+.logout-btn { margin-top:1rem; padding:0.5rem 1rem; display:block; text-align:center; }
+</style>
+</head>
+<body>
+
+<!-- Login Screen -->
+<div id="loginScreen">
+  <div class="login-box">
+    <h1>CORTEX Auto-Bewerbungen</h1>
+    <div class="login-error" id="loginError"></div>
+    <input type="email" id="loginEmail" placeholder="E-Mail" autocomplete="email">
+    <input type="password" id="loginPassword" placeholder="Passwort" autocomplete="current-password">
+    <button onclick="login()">Anmelden</button>
+  </div>
+</div>
+
+<!-- Main App -->
+<div id="app">
+  <div class="layout">
+    <div class="sidebar">
+      <h2>Auto-Bewerbungen</h2>
+      <div class="nav-item active" data-page="dashboard">Dashboard</div>
+      <div class="nav-item" data-page="profile">Profil</div>
+      <div class="nav-item" data-page="resume">Lebenslauf</div>
+      <div class="nav-item" data-page="preferences">Einstellungen</div>
+      <div class="nav-item" data-page="search">Suche starten</div>
+      <div class="nav-item" data-page="applications">Bewerbungen</div>
+      <div class="nav-item" data-page="logs">Protokoll</div>
+      <div class="nav-status">
+        <div id="statusIndicator" class="text-muted">Bereit</div>
+      </div>
+      <div class="nav-item logout-btn" onclick="logout()">Abmelden</div>
+    </div>
+
+    <div class="main">
+      <!-- Dashboard -->
+      <div class="page active" id="page-dashboard">
+        <h1>Dashboard</h1>
+        <div class="stats-grid">
+          <div class="stat-card"><div class="label">Gesamt Bewerbungen</div><div class="value" id="statTotal">0</div></div>
+          <div class="stat-card"><div class="label">Diese Woche</div><div class="value" id="statWeek">0</div></div>
+          <div class="stat-card"><div class="label">Interviews</div><div class="value warn" id="statInterview">0</div></div>
+          <div class="stat-card"><div class="label">Angebote</div><div class="value" id="statOffer">0</div></div>
+        </div>
+        <div class="section">
+          <h2>Letzte Bewerbungen</h2>
+          <table>
+            <thead><tr><th>Stelle</th><th>Firma</th><th>Status</th><th>Datum</th></tr></thead>
+            <tbody id="recentApps"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Profile -->
+      <div class="page" id="page-profile">
+        <h1>Profil</h1>
+        <div class="section">
+          <div class="form-row">
+            <div class="form-group"><label>Vollständiger Name</label><input id="profName" placeholder="Max Mustermann"></div>
+            <div class="form-group"><label>E-Mail</label><input id="profEmail" type="email" placeholder="max@example.com"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Telefon</label><input id="profPhone" placeholder="+49 123 456789"></div>
+            <div class="form-group"><label>Standort</label><input id="profLocation" placeholder="Berlin, Deutschland"></div>
+          </div>
+          <div class="form-group"><label>Berufsbezeichnung</label><input id="profHeadline" placeholder="Software Entwickler"></div>
+          <div class="form-group"><label>Zusammenfassung</label><textarea id="profSummary" placeholder="Kurze berufliche Zusammenfassung..."></textarea></div>
+          <div class="form-group">
+            <label>Fähigkeiten (Enter zum Hinzufügen)</label>
+            <div class="tag-input" id="skillsInput"><input placeholder="Fähigkeit eingeben..." onkeydown="handleTag(event,'skills')"></div>
+          </div>
+          <button class="btn btn-primary mt-2" onclick="saveProfile()">Profil speichern</button>
+        </div>
+      </div>
+
+      <!-- Resume -->
+      <div class="page" id="page-resume">
+        <h1>Lebenslauf</h1>
+        <div class="section">
+          <p class="text-muted mb-2">Lade deinen Lebenslauf hoch (PDF, DOCX - max 10MB)</p>
+          <div id="resumeInfo" class="mb-2"></div>
+          <input type="file" id="resumeFile" accept=".pdf,.docx,.doc" style="display:none" onchange="uploadResume()">
+          <button class="btn btn-primary" onclick="document.getElementById('resumeFile').click()">Lebenslauf hochladen</button>
+          <button class="btn btn-secondary" id="downloadResume" onclick="downloadResume()" style="display:none">Herunterladen</button>
+        </div>
+      </div>
+
+      <!-- Preferences -->
+      <div class="page" id="page-preferences">
+        <h1>Sucheinstellungen</h1>
+        <div class="section">
+          <div class="form-group">
+            <label>Suchbegriffe (Enter zum Hinzufügen)</label>
+            <div class="tag-input" id="keywordsInput"><input placeholder="z.B. Software Entwickler..." onkeydown="handleTag(event,'keywords')"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Standort</label><input id="prefLocation" placeholder="Berlin"></div>
+            <div class="form-group"><label>Umkreis (km)</label><input id="prefRadius" type="number" value="50"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Beschäftigungsart</label>
+              <select id="prefJobType">
+                <option value="fulltime">Vollzeit</option>
+                <option value="parttime">Teilzeit</option>
+                <option value="contract">Vertrag</option>
+                <option value="temporary">Befristet</option>
+                <option value="internship">Praktikum</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Remote</label>
+              <select id="prefRemote">
+                <option value="any">Egal</option>
+                <option value="remote">Remote</option>
+                <option value="hybrid">Hybrid</option>
+                <option value="onsite">Vor Ort</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Mindestgehalt (EUR/Jahr)</label><input id="prefSalaryMin" type="number" placeholder="0"></div>
+            <div class="form-group"><label>Maximalgehalt (EUR/Jahr)</label><input id="prefSalaryMax" type="number" placeholder="0"></div>
+          </div>
+          <div class="form-group"><label>Max. Bewerbungen pro Durchlauf</label><input id="prefMaxApps" type="number" value="20"></div>
+          <div class="form-group">
+            <label>Ausschlussbegriffe (Enter zum Hinzufügen)</label>
+            <div class="tag-input" id="excludeInput"><input placeholder="Firma oder Begriff ausschließen..." onkeydown="handleTag(event,'exclude')"></div>
+          </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:12px;margin-top:1rem;">
+            <label class="toggle"><input type="checkbox" id="prefAutoApply"><span class="slider"></span></label>
+            <span>Auto-Apply (Bewerbungen automatisch absenden)</span>
+          </div>
+          <button class="btn btn-primary mt-2" onclick="savePreferences()">Einstellungen speichern</button>
+        </div>
+      </div>
+
+      <!-- Search -->
+      <div class="page" id="page-search">
+        <h1>Suche & Bewerbung</h1>
+        <div class="search-control">
+          <div id="searchStatusDot"></div>
+          <span id="searchStatusText">Bereit zum Starten</span>
+          <div style="flex:1"></div>
+          <button class="btn btn-primary" id="btnStart" onclick="startSearch()">Suche starten</button>
+          <button class="btn btn-danger" id="btnStop" onclick="stopSearch()" style="display:none">Stoppen</button>
+        </div>
+        <div class="section">
+          <h2>Live-Protokoll</h2>
+          <div class="log-viewer" id="liveLog">
+            <div class="text-muted">Starte eine Suche um das Protokoll zu sehen...</div>
+          </div>
+        </div>
+        <div class="section">
+          <h2>Gefundene Stellen in diesem Durchlauf</h2>
+          <table>
+            <thead><tr><th>Stelle</th><th>Firma</th><th>Standort</th><th>Status</th></tr></thead>
+            <tbody id="liveJobs"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Applications -->
+      <div class="page" id="page-applications">
+        <h1>Bewerbungen</h1>
+        <div style="margin-bottom:1rem;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-sm btn-secondary filter-btn active" data-filter="">Alle</button>
+          <button class="btn btn-sm btn-secondary filter-btn" data-filter="applied">Beworben</button>
+          <button class="btn btn-sm btn-secondary filter-btn" data-filter="found">Gefunden</button>
+          <button class="btn btn-sm btn-secondary filter-btn" data-filter="interview">Interview</button>
+          <button class="btn btn-sm btn-secondary filter-btn" data-filter="offer">Angebot</button>
+          <button class="btn btn-sm btn-secondary filter-btn" data-filter="rejected">Abgelehnt</button>
+        </div>
+        <table>
+          <thead><tr><th>Stelle</th><th>Firma</th><th>Standort</th><th>Status</th><th>Datum</th><th>Aktionen</th></tr></thead>
+          <tbody id="appsList"></tbody>
+        </table>
+      </div>
+
+      <!-- Logs -->
+      <div class="page" id="page-logs">
+        <h1>Protokoll</h1>
+        <div class="log-viewer" id="historyLog" style="max-height:600px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '/api/jobs';
+let tags = { skills: [], keywords: [], exclude: [] };
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+
+async function login() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pass }),
+      credentials: 'include'
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Fehler'; errEl.style.display = 'block'; return; }
+    showApp();
+  } catch (e) { errEl.textContent = 'Verbindungsfehler'; errEl.style.display = 'block'; }
+}
+
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+}
+
+async function checkAuth() {
+  try {
+    const res = await fetch(API + '/stats', { credentials: 'include' });
+    if (res.ok) { showApp(); return; }
+  } catch {}
+  document.getElementById('loginScreen').style.display = 'flex';
+}
+
+function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  loadDashboard();
+  loadResumeInfo();
+  checkSearchStatus();
+}
+
+// ── Navigation ───────────────────────────────────────────────────────────────
+
+document.querySelectorAll('.nav-item[data-page]').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    el.classList.add('active');
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + el.dataset.page).classList.add('active');
+
+    // Load data for page
+    const page = el.dataset.page;
+    if (page === 'dashboard') loadDashboard();
+    else if (page === 'profile') loadProfile();
+    else if (page === 'preferences') loadPreferences();
+    else if (page === 'applications') loadApplications();
+    else if (page === 'logs') loadLogs();
+  });
+});
+
+// ── Dashboard ────────────────────────────────────────────────────────────────
+
+async function loadDashboard() {
+  try {
+    const res = await fetch(API + '/stats', { credentials: 'include' });
+    const data = await res.json();
+    document.getElementById('statTotal').textContent = data.total || 0;
+    document.getElementById('statWeek').textContent = data.thisWeek || 0;
+    const interviews = (data.byStatus || []).find(s => s.status === 'interview');
+    const offers = (data.byStatus || []).find(s => s.status === 'offer');
+    document.getElementById('statInterview').textContent = interviews?.c || 0;
+    document.getElementById('statOffer').textContent = offers?.c || 0;
+
+    // Recent apps
+    const appsRes = await fetch(API + '/applications?limit=10', { credentials: 'include' });
+    const appsData = await appsRes.json();
+    const tbody = document.getElementById('recentApps');
+    tbody.innerHTML = (appsData.applications || []).map(a => `
+      <tr>
+        <td>${esc(a.job_title)}</td>
+        <td>${esc(a.company)}</td>
+        <td><span class="badge badge-${a.status}">${statusLabel(a.status)}</span></td>
+        <td>${formatDate(a.created_at)}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="4" class="text-muted">Noch keine Bewerbungen</td></tr>';
+  } catch {}
+}
+
+// ── Profile ──────────────────────────────────────────────────────────────────
+
+async function loadProfile() {
+  try {
+    const res = await fetch(API + '/profile', { credentials: 'include' });
+    const { profile } = await res.json();
+    if (profile) {
+      document.getElementById('profName').value = profile.full_name || '';
+      document.getElementById('profEmail').value = profile.email || '';
+      document.getElementById('profPhone').value = profile.phone || '';
+      document.getElementById('profLocation').value = profile.location || '';
+      document.getElementById('profHeadline').value = profile.headline || '';
+      document.getElementById('profSummary').value = profile.summary || '';
+      tags.skills = profile.skills || [];
+      renderTags('skills');
+    }
+  } catch {}
+}
+
+async function saveProfile() {
+  const body = {
+    full_name: document.getElementById('profName').value,
+    email: document.getElementById('profEmail').value,
+    phone: document.getElementById('profPhone').value,
+    location: document.getElementById('profLocation').value,
+    headline: document.getElementById('profHeadline').value,
+    summary: document.getElementById('profSummary').value,
+    skills: tags.skills
+  };
+  const res = await fetch(API + '/profile', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body), credentials: 'include'
+  });
+  if (res.ok) alert('Profil gespeichert!');
+}
+
+// ── Resume ───────────────────────────────────────────────────────────────────
+
+async function loadResumeInfo() {
+  try {
+    const res = await fetch(API + '/resume/info', { credentials: 'include' });
+    const data = await res.json();
+    const el = document.getElementById('resumeInfo');
+    const dl = document.getElementById('downloadResume');
+    if (data.hasResume) {
+      el.innerHTML = `<span class="badge badge-applied">Hochgeladen: ${esc(data.filename)}</span>`;
+      dl.style.display = 'inline-block';
+    } else {
+      el.innerHTML = '<span class="text-muted">Noch kein Lebenslauf hochgeladen</span>';
+      dl.style.display = 'none';
+    }
+  } catch {}
+}
+
+async function uploadResume() {
+  const file = document.getElementById('resumeFile').files[0];
+  if (!file) return;
+  const res = await fetch(API + '/resume', {
+    method: 'POST',
+    headers: { 'Content-Type': file.type, 'X-Filename': file.name },
+    body: file, credentials: 'include'
+  });
+  if (res.ok) { alert('Lebenslauf hochgeladen!'); loadResumeInfo(); }
+}
+
+function downloadResume() {
+  window.open(API + '/resume', '_blank');
+}
+
+// ── Preferences ──────────────────────────────────────────────────────────────
+
+async function loadPreferences() {
+  try {
+    const res = await fetch(API + '/preferences', { credentials: 'include' });
+    const { preferences } = await res.json();
+    if (preferences) {
+      tags.keywords = preferences.keywords || [];
+      tags.exclude = preferences.exclude_keywords || [];
+      renderTags('keywords');
+      renderTags('exclude');
+      document.getElementById('prefLocation').value = preferences.location || '';
+      document.getElementById('prefRadius').value = preferences.radius_km || 50;
+      document.getElementById('prefJobType').value = preferences.job_type || 'fulltime';
+      document.getElementById('prefRemote').value = preferences.remote_preference || 'any';
+      document.getElementById('prefSalaryMin').value = preferences.salary_min || '';
+      document.getElementById('prefSalaryMax').value = preferences.salary_max || '';
+      document.getElementById('prefMaxApps').value = preferences.max_applications_per_run || 20;
+      document.getElementById('prefAutoApply').checked = preferences.auto_apply;
+    }
+  } catch {}
+}
+
+async function savePreferences() {
+  const body = {
+    keywords: tags.keywords,
+    location: document.getElementById('prefLocation').value,
+    radius_km: parseInt(document.getElementById('prefRadius').value) || 50,
+    job_type: document.getElementById('prefJobType').value,
+    remote_preference: document.getElementById('prefRemote').value,
+    salary_min: parseInt(document.getElementById('prefSalaryMin').value) || 0,
+    salary_max: parseInt(document.getElementById('prefSalaryMax').value) || 0,
+    max_applications_per_run: parseInt(document.getElementById('prefMaxApps').value) || 20,
+    exclude_keywords: tags.exclude,
+    auto_apply: document.getElementById('prefAutoApply').checked
+  };
+  const res = await fetch(API + '/preferences', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body), credentials: 'include'
+  });
+  if (res.ok) alert('Einstellungen gespeichert!');
+}
+
+// ── Applications ─────────────────────────────────────────────────────────────
+
+let currentFilter = '';
+
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = btn.dataset.filter;
+    loadApplications();
+  });
+});
+
+async function loadApplications() {
+  try {
+    const url = currentFilter ? `${API}/applications?status=${currentFilter}` : `${API}/applications`;
+    const res = await fetch(url, { credentials: 'include' });
+    const { applications } = await res.json();
+    const tbody = document.getElementById('appsList');
+    tbody.innerHTML = (applications || []).map(a => `
+      <tr>
+        <td>${a.job_url ? `<a href="${esc(a.job_url)}" target="_blank">${esc(a.job_title)}</a>` : esc(a.job_title)}</td>
+        <td>${esc(a.company)}</td>
+        <td>${esc(a.location)}</td>
+        <td>
+          <select class="btn btn-sm btn-secondary" onchange="updateStatus('${a.id}',this.value)" style="padding:2px 6px;font-size:11px;">
+            ${['found','applied','viewed','interview','rejected','offer','withdrawn'].map(s =>
+              `<option value="${s}" ${a.status===s?'selected':''}>${statusLabel(s)}</option>`
+            ).join('')}
+          </select>
+        </td>
+        <td>${formatDate(a.created_at)}</td>
+        <td>${a.job_url ? `<a href="${esc(a.job_url)}" target="_blank" class="btn btn-sm btn-secondary">Link</a>` : ''}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="6" class="text-muted">Keine Bewerbungen</td></tr>';
+  } catch {}
+}
+
+async function updateStatus(id, status) {
+  await fetch(`${API}/applications/${id}/status`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }), credentials: 'include'
+  });
+}
+
+// ── Search ───────────────────────────────────────────────────────────────────
+
+let searchPolling = null;
+
+async function startSearch() {
+  const res = await fetch(API + '/search/start', { method: 'POST', credentials: 'include' });
+  const data = await res.json();
+  if (!res.ok) { alert(data.error); return; }
+  setSearchUI(true);
+  document.getElementById('liveLog').innerHTML = '';
+  document.getElementById('liveJobs').innerHTML = '';
+  startPolling();
+}
+
+async function stopSearch() {
+  await fetch(API + '/search/stop', { method: 'POST', credentials: 'include' });
+  setSearchUI(false);
+  stopPolling();
+}
+
+function setSearchUI(running) {
+  document.getElementById('btnStart').style.display = running ? 'none' : 'inline-block';
+  document.getElementById('btnStop').style.display = running ? 'inline-block' : 'none';
+  document.getElementById('searchStatusDot').innerHTML = running ? '<span class="pulse"></span>' : '';
+  document.getElementById('searchStatusText').textContent = running ? 'Suche läuft...' : 'Bereit zum Starten';
+  document.getElementById('statusIndicator').textContent = running ? 'Suche aktiv...' : 'Bereit';
+}
+
+async function checkSearchStatus() {
+  try {
+    const res = await fetch(API + '/search/status', { credentials: 'include' });
+    const data = await res.json();
+    if (data.running) { setSearchUI(true); startPolling(); }
+  } catch {}
+}
+
+function startPolling() {
+  stopPolling();
+  searchPolling = setInterval(async () => {
+    try {
+      const [statusRes, logsRes] = await Promise.all([
+        fetch(API + '/search/status', { credentials: 'include' }),
+        fetch(API + '/logs?limit=50', { credentials: 'include' })
+      ]);
+      const status = await statusRes.json();
+      const logData = await logsRes.json();
+
+      if (!status.running) {
+        setSearchUI(false);
+        stopPolling();
+        loadDashboard();
+      }
+
+      // Update live log
+      const logEl = document.getElementById('liveLog');
+      logEl.innerHTML = (logData.logs || []).reverse().map(l =>
+        `<div class="log-${l.level}"><span class="log-time">${formatTime(l.created_at)}</span>${esc(l.message)}</div>`
+      ).join('');
+      logEl.scrollTop = logEl.scrollHeight;
+    } catch {}
+  }, 2000);
+}
+
+function stopPolling() {
+  if (searchPolling) { clearInterval(searchPolling); searchPolling = null; }
+}
+
+// ── Logs ─────────────────────────────────────────────────────────────────────
+
+async function loadLogs() {
+  try {
+    const res = await fetch(API + '/logs?limit=200', { credentials: 'include' });
+    const { logs } = await res.json();
+    document.getElementById('historyLog').innerHTML = (logs || []).map(l =>
+      `<div class="log-${l.level}"><span class="log-time">${formatTime(l.created_at)}</span>${esc(l.message)}</div>`
+    ).join('') || '<div class="text-muted">Keine Protokolleinträge</div>';
+  } catch {}
+}
+
+// ── Tag Input ────────────────────────────────────────────────────────────────
+
+function handleTag(e, group) {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const val = e.target.value.trim();
+  if (!val || tags[group].includes(val)) return;
+  tags[group].push(val);
+  e.target.value = '';
+  renderTags(group);
+}
+
+function renderTags(group) {
+  const containers = { skills: 'skillsInput', keywords: 'keywordsInput', exclude: 'excludeInput' };
+  const el = document.getElementById(containers[group]);
+  if (!el) return;
+  const input = el.querySelector('input');
+  el.querySelectorAll('.tag').forEach(t => t.remove());
+  tags[group].forEach((t, i) => {
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.innerHTML = `${esc(t)} <span class="remove" onclick="removeTag('${group}',${i})">x</span>`;
+    el.insertBefore(tag, input);
+  });
+}
+
+function removeTag(group, idx) {
+  tags[group].splice(idx, 1);
+  renderTags(group);
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+function statusLabel(s) {
+  const map = { found:'Gefunden', applied:'Beworben', viewed:'Angesehen', interview:'Interview', rejected:'Abgelehnt', offer:'Angebot', withdrawn:'Zurückgezogen' };
+  return map[s] || s;
+}
+
+function formatDate(d) {
+  if (!d) return '-';
+  return new Date(d + 'Z').toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+
+function formatTime(d) {
+  if (!d) return '';
+  return new Date(d + 'Z').toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+
+// Handle Enter on login
+document.getElementById('loginPassword').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+// Init
+checkAuth();
+</script>
+</body>
+</html>
