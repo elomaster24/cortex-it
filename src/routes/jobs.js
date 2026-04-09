@@ -58,16 +58,17 @@ router.get('/preferences', (req, res) => {
   if (!prefs) return res.json({ preferences: null });
   try { prefs.keywords = JSON.parse(prefs.keywords || '[]'); } catch { prefs.keywords = []; }
   try { prefs.exclude_keywords = JSON.parse(prefs.exclude_keywords || '[]'); } catch { prefs.exclude_keywords = []; }
+  try { prefs.platforms = JSON.parse(prefs.platforms || '["indeed"]'); } catch { prefs.platforms = ['indeed']; }
   prefs.auto_apply = !!prefs.auto_apply;
   res.json({ preferences: prefs });
 });
 
 router.put('/preferences', (req, res) => {
   const { keywords, location, radius_km, job_type, salary_min, salary_max,
-          remote_preference, exclude_keywords, max_applications_per_run, auto_apply } = req.body;
+          remote_preference, exclude_keywords, max_applications_per_run, auto_apply, platforms } = req.body;
   jobDb.upsertPreferences(req.user.id, {
     keywords, location, radius_km, job_type, salary_min, salary_max,
-    remote_preference, exclude_keywords, max_applications_per_run, auto_apply
+    remote_preference, exclude_keywords, max_applications_per_run, auto_apply, platforms
   });
   res.json({ ok: true });
 });

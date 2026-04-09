@@ -87,6 +87,13 @@ td a { color:var(--accent2); }
 .badge-offer { background:#76ff0333; color:#76ff03; }
 .badge-viewed { background:#7c4dff33; color:#7c4dff; }
 .badge-withdrawn { background:#78909c33; color:#78909c; }
+.badge-indeed { background:#2164f333; color:#2164f3; }
+.badge-linkedin { background:#0a66c233; color:#0a66c2; }
+
+.platform-toggle { display:flex; gap:12px; margin-bottom:1rem; }
+.platform-toggle label { display:flex; align-items:center; gap:8px; padding:8px 16px; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; font-size:14px; transition:all .15s; }
+.platform-toggle label:has(input:checked) { border-color:var(--accent); background:rgba(0,230,118,0.1); }
+.platform-toggle input[type="checkbox"] { accent-color:var(--accent); }
 
 /* Tags */
 .tag-input { display:flex; flex-wrap:wrap; gap:4px; padding:6px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); min-height:38px; align-items:center; }
@@ -218,6 +225,14 @@ td a { color:var(--accent2); }
       <div class="page" id="page-preferences">
         <h1>Sucheinstellungen</h1>
         <div class="section">
+          <h2>Plattformen</h2>
+          <div class="platform-toggle">
+            <label><input type="checkbox" id="platIndeed" checked> Indeed</label>
+            <label><input type="checkbox" id="platLinkedIn"> LinkedIn</label>
+          </div>
+          <p class="text-muted mb-2">LinkedIn benötigt LINKEDIN_EMAIL und LINKEDIN_PASSWORD in .env</p>
+        </div>
+        <div class="section">
           <div class="form-group">
             <label>Suchbegriffe (Enter zum Hinzufügen)</label>
             <div class="tag-input" id="keywordsInput"><input placeholder="z.B. Software Entwickler..." onkeydown="handleTag(event,'keywords')"></div>
@@ -301,7 +316,7 @@ td a { color:var(--accent2); }
           <button class="btn btn-sm btn-secondary filter-btn" data-filter="rejected">Abgelehnt</button>
         </div>
         <table>
-          <thead><tr><th>Stelle</th><th>Firma</th><th>Standort</th><th>Status</th><th>Datum</th><th>Aktionen</th></tr></thead>
+          <thead><tr><th>Stelle</th><th>Firma</th><th>Plattform</th><th>Standort</th><th>Status</th><th>Datum</th><th>Aktionen</th></tr></thead>
           <tbody id="appsList"></tbody>
         </table>
       </div>
@@ -497,6 +512,9 @@ async function loadPreferences() {
       document.getElementById('prefSalaryMax').value = preferences.salary_max || '';
       document.getElementById('prefMaxApps').value = preferences.max_applications_per_run || 20;
       document.getElementById('prefAutoApply').checked = preferences.auto_apply;
+      const plats = preferences.platforms || ['indeed'];
+      document.getElementById('platIndeed').checked = plats.includes('indeed');
+      document.getElementById('platLinkedIn').checked = plats.includes('linkedin');
     }
   } catch {}
 }
@@ -512,7 +530,11 @@ async function savePreferences() {
     salary_max: parseInt(document.getElementById('prefSalaryMax').value) || 0,
     max_applications_per_run: parseInt(document.getElementById('prefMaxApps').value) || 20,
     exclude_keywords: tags.exclude,
-    auto_apply: document.getElementById('prefAutoApply').checked
+    auto_apply: document.getElementById('prefAutoApply').checked,
+    platforms: [
+      ...(document.getElementById('platIndeed').checked ? ['indeed'] : []),
+      ...(document.getElementById('platLinkedIn').checked ? ['linkedin'] : [])
+    ]
   };
   const res = await fetch(API + '/preferences', {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -544,6 +566,7 @@ async function loadApplications() {
       <tr>
         <td>${a.job_url ? `<a href="${esc(a.job_url)}" target="_blank">${esc(a.job_title)}</a>` : esc(a.job_title)}</td>
         <td>${esc(a.company)}</td>
+        <td><span class="badge badge-${a.platform || 'indeed'}">${(a.platform || 'indeed').toUpperCase()}</span></td>
         <td>${esc(a.location)}</td>
         <td>
           <select class="btn btn-sm btn-secondary" onchange="updateStatus('${a.id}',this.value)" style="padding:2px 6px;font-size:11px;">
@@ -555,7 +578,7 @@ async function loadApplications() {
         <td>${formatDate(a.created_at)}</td>
         <td>${a.job_url ? `<a href="${esc(a.job_url)}" target="_blank" class="btn btn-sm btn-secondary">Link</a>` : ''}</td>
       </tr>
-    `).join('') || '<tr><td colspan="6" class="text-muted">Keine Bewerbungen</td></tr>';
+    `).join('') || '<tr><td colspan="7" class="text-muted">Keine Bewerbungen</td></tr>';
   } catch {}
 }
 

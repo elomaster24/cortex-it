@@ -37,6 +37,7 @@ function initJobTables() {
       exclude_keywords TEXT DEFAULT '[]',
       max_applications_per_run INTEGER DEFAULT 20,
       auto_apply INTEGER DEFAULT 0,
+      platforms TEXT DEFAULT '["indeed"]',
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
@@ -50,6 +51,7 @@ function initJobTables() {
       salary_info TEXT DEFAULT '',
       job_url TEXT DEFAULT '',
       indeed_job_id TEXT DEFAULT '',
+      platform TEXT DEFAULT 'indeed',
       status TEXT DEFAULT 'applied',
       applied_at TEXT DEFAULT (datetime('now')),
       notes TEXT DEFAULT '',
@@ -140,34 +142,36 @@ function upsertPreferences(userId, data) {
   if (existing) {
     db.prepare(`
       UPDATE job_preferences SET keywords=?, location=?, radius_km=?, job_type=?, salary_min=?, salary_max=?,
-        remote_preference=?, exclude_keywords=?, max_applications_per_run=?, auto_apply=?, updated_at=datetime('now')
+        remote_preference=?, exclude_keywords=?, max_applications_per_run=?, auto_apply=?, platforms=?, updated_at=datetime('now')
       WHERE user_id=?
     `).run(JSON.stringify(data.keywords || []), data.location || '', data.radius_km || 50,
       data.job_type || 'fulltime', data.salary_min || 0, data.salary_max || 0,
       data.remote_preference || 'any', JSON.stringify(data.exclude_keywords || []),
-      data.max_applications_per_run || 20, data.auto_apply ? 1 : 0, userId);
+      data.max_applications_per_run || 20, data.auto_apply ? 1 : 0,
+      JSON.stringify(data.platforms || ['indeed']), userId);
     return existing.id;
   }
   const id = uuidv4();
   db.prepare(`
     INSERT INTO job_preferences (id, user_id, keywords, location, radius_km, job_type, salary_min, salary_max,
-      remote_preference, exclude_keywords, max_applications_per_run, auto_apply)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      remote_preference, exclude_keywords, max_applications_per_run, auto_apply, platforms)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(id, userId, JSON.stringify(data.keywords || []), data.location || '', data.radius_km || 50,
     data.job_type || 'fulltime', data.salary_min || 0, data.salary_max || 0,
     data.remote_preference || 'any', JSON.stringify(data.exclude_keywords || []),
-    data.max_applications_per_run || 20, data.auto_apply ? 1 : 0);
+    data.max_applications_per_run || 20, data.auto_apply ? 1 : 0,
+    JSON.stringify(data.platforms || ['indeed']));
   return id;
 }
 
 function addApplication(userId, data) {
   const id = uuidv4();
   getDb().prepare(`
-    INSERT INTO job_applications (id, user_id, job_title, company, location, salary_info, job_url, indeed_job_id, status, job_description)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO job_applications (id, user_id, job_title, company, location, salary_info, job_url, indeed_job_id, platform, status, job_description)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(id, userId, data.job_title || '', data.company || '', data.location || '',
     data.salary_info || '', data.job_url || '', data.indeed_job_id || '',
-    data.status || 'applied', data.job_description || '');
+    data.platform || 'indeed', data.status || 'applied', data.job_description || '');
   return id;
 }
 
