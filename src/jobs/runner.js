@@ -89,10 +89,12 @@ async function startRun(userId, io) {
           for (const job of jobs) {
             if (automation.stopped || totalApplied >= maxApply) break;
 
-            // Check if already applied (by job ID or URL)
-            const existing = jobDb.getApplications(userId, {}).find(
+            // Check if already applied (by job ID, URL, or title+company match)
+            const allApps = jobDb.getApplications(userId, {});
+            const existing = allApps.find(
               a => (a.indeed_job_id === job.indeed_job_id && job.indeed_job_id) ||
-                   (a.job_url === job.job_url && job.job_url)
+                   (a.job_url === job.job_url && job.job_url) ||
+                   (a.job_title === job.job_title && a.company === job.company && job.job_title)
             );
             if (existing) {
               callbacks.onLog('info', `Bereits beworben: ${job.job_title} @ ${job.company}`);

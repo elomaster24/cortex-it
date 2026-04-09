@@ -161,27 +161,45 @@ class LinkedInAutomation {
       params.set('f_WT', remoteMap[this.prefs.remote_preference]);
     }
 
-    const url = `https://www.linkedin.com/jobs/search/?${params.toString()}`;
-    this.onLog('info', `[LinkedIn] Öffne Suche: ${url}`);
+    const allJobs = [];
+    const maxPages = 3; // Scrape up to 3 pages (75 results)
+    const maxApply = this.prefs.max_applications_per_run || 20;
 
-    try {
-      await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await randomDelay(3000, 5000);
-    } catch (err) {
-      this.onLog('error', `[LinkedIn] Seite konnte nicht geladen werden: ${err.message}`);
-      await this._screenshot('linkedin_load_error');
-      return [];
+    for (let page = 0; page < maxPages; page++) {
+      if (this.stopped || allJobs.length >= maxApply * 2) break;
+
+      const pageParams = new URLSearchParams(params);
+      if (page > 0) pageParams.set('start', String(page * 25)); // LinkedIn uses 25 per page
+
+      const url = `https://www.linkedin.com/jobs/search/?${pageParams.toString()}`;
+      this.onLog('info', `[LinkedIn] Seite ${page + 1}: ${url}`);
+
+      try {
+        await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await randomDelay(3000, 5000);
+      } catch (err) {
+        this.onLog('error', `[LinkedIn] Seite ${page + 1} konnte nicht geladen werden: ${err.message}`);
+        await this._screenshot('linkedin_load_error');
+        break;
+      }
+
+      const blocked = await this._checkBlocked();
+      if (blocked) {
+        this.onLog('warn', '[LinkedIn] Möglicherweise blockiert');
+        await this._screenshot('linkedin_blocked');
+        break;
+      }
+
+      const pageJobs = await this.parseResults();
+      if (pageJobs.length === 0) break;
+
+      allJobs.push(...pageJobs);
+      this.onLog('info', `[LinkedIn] Seite ${page + 1}: ${pageJobs.length} Stellen (Gesamt: ${allJobs.length})`);
+
+      if (page < maxPages - 1) await randomDelay(4000, 8000);
     }
 
-    // Check if blocked
-    const blocked = await this._checkBlocked();
-    if (blocked) {
-      this.onLog('warn', '[LinkedIn] Möglicherweise blockiert');
-      await this._screenshot('linkedin_blocked');
-      return [];
-    }
-
-    return await this.parseResults();
+    return allJobs;
   }
 
   async parseResults() {

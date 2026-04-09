@@ -177,6 +177,8 @@ td a { color:var(--accent2); }
           <div class="stat-card"><div class="label">Diese Woche</div><div class="value" id="statWeek">0</div></div>
           <div class="stat-card"><div class="label">Interviews</div><div class="value warn" id="statInterview">0</div></div>
           <div class="stat-card"><div class="label">Angebote</div><div class="value" id="statOffer">0</div></div>
+          <div class="stat-card"><div class="label">Indeed</div><div class="value" id="statIndeed" style="color:#2164f3">0</div></div>
+          <div class="stat-card"><div class="label">LinkedIn</div><div class="value" id="statLinkedIn" style="color:#0a66c2">0</div></div>
         </div>
         <div class="section">
           <h2>Letzte Bewerbungen</h2>
@@ -408,6 +410,10 @@ async function loadDashboard() {
     const offers = (data.byStatus || []).find(s => s.status === 'offer');
     document.getElementById('statInterview').textContent = interviews?.c || 0;
     document.getElementById('statOffer').textContent = offers?.c || 0;
+    const indeedCount = (data.byPlatform || []).find(p => p.platform === 'indeed');
+    const linkedinCount = (data.byPlatform || []).find(p => p.platform === 'linkedin');
+    document.getElementById('statIndeed').textContent = indeedCount?.c || 0;
+    document.getElementById('statLinkedIn').textContent = linkedinCount?.c || 0;
 
     // Recent apps
     const appsRes = await fetch(API + '/applications?limit=10', { credentials: 'include' });

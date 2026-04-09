@@ -195,8 +195,9 @@ function getStats(userId) {
   const total = db.prepare('SELECT COUNT(*) as c FROM job_applications WHERE user_id = ?').get(userId).c;
   const thisWeek = db.prepare("SELECT COUNT(*) as c FROM job_applications WHERE user_id = ? AND created_at >= datetime('now', '-7 days')").get(userId).c;
   const byStatus = db.prepare('SELECT status, COUNT(*) as c FROM job_applications WHERE user_id = ? GROUP BY status').all(userId);
+  const byPlatform = db.prepare('SELECT platform, COUNT(*) as c FROM job_applications WHERE user_id = ? GROUP BY platform').all(userId);
   const recentRun = db.prepare('SELECT * FROM job_search_runs WHERE user_id = ? ORDER BY started_at DESC LIMIT 1').get(userId);
-  return { total, thisWeek, byStatus, recentRun };
+  return { total, thisWeek, byStatus, byPlatform, recentRun };
 }
 
 function createRun(userId) {

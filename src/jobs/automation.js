@@ -66,9 +66,9 @@ class JobAutomation {
       return [];
     }
 
-    this.onLog('info', `Suche: "${query}" in "${location || 'Überall'}"`);
+    this.onLog('info', `[Indeed] Suche: "${query}" in "${location || 'Überall'}"`);
 
-    // Build Indeed URL
+    // Build base Indeed URL params
     const params = new URLSearchParams();
     params.set('q', query);
     if (location) params.set('l', location);
@@ -85,27 +85,52 @@ class JobAutomation {
       params.set('jt', jobTypeMap[this.prefs.job_type]);
     }
 
-    const url = `https://de.indeed.com/jobs?${params.toString()}`;
-    this.onLog('info', `Öffne Indeed: ${url}`);
+    const allJobs = [];
+    const maxPages = 3; // Scrape up to 3 pages (30 results)
+    const maxApply = this.prefs.max_applications_per_run || 20;
 
-    try {
-      await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await randomDelay(3000, 5000);
-    } catch (err) {
-      this.onLog('error', `Seite konnte nicht geladen werden: ${err.message}`);
-      await this._screenshot('load_error');
-      return [];
+    for (let page = 0; page < maxPages; page++) {
+      if (this.stopped || allJobs.length >= maxApply * 2) break;
+
+      const pageParams = new URLSearchParams(params);
+      if (page > 0) pageParams.set('start', String(page * 10));
+
+      const url = `https://de.indeed.com/jobs?${pageParams.toString()}`;
+      this.onLog('info', `[Indeed] Seite ${page + 1}: ${url}`);
+
+      try {
+        await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await randomDelay(3000, 5000);
+      } catch (err) {
+        this.onLog('error', `[Indeed] Seite ${page + 1} konnte nicht geladen werden: ${err.message}`);
+        await this._screenshot('load_error');
+        break;
+      }
+
+      // Check for captcha/block
+      const blocked = await this._checkBlocked();
+      if (blocked) {
+        this.onLog('warn', '[Indeed] Möglicherweise blockiert (Captcha/Block erkannt)');
+        await this._screenshot('blocked');
+        break;
+      }
+
+      const pageJobs = await this.parseResults();
+      if (pageJobs.length === 0) break; // No more results
+
+      // Tag all jobs with platform
+      for (const job of pageJobs) {
+        job.platform = 'indeed';
+      }
+
+      allJobs.push(...pageJobs);
+      this.onLog('info', `[Indeed] Seite ${page + 1}: ${pageJobs.length} Stellen (Gesamt: ${allJobs.length})`);
+
+      // Delay between pages
+      if (page < maxPages - 1) await randomDelay(3000, 6000);
     }
 
-    // Check for captcha/block
-    const blocked = await this._checkBlocked();
-    if (blocked) {
-      this.onLog('warn', 'Indeed hat uns möglicherweise blockiert (Captcha/Block erkannt)');
-      await this._screenshot('blocked');
-      return [];
-    }
-
-    return await this.parseResults();
+    return allJobs;
   }
 
   async parseResults() {
