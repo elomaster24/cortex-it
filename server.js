@@ -26,8 +26,13 @@ if (JWT_SECRET === 'cortex-secret-key-change-me') {
 
 init();
 
-const ADMIN_PORT = process.env.ADMIN_PORT || 8200;
-const USER_PORT  = process.env.USER_PORT  || 8201;
+// Initialize job application tables
+const { initJobTables } = require('./src/jobs/database');
+initJobTables();
+
+const ADMIN_PORT   = process.env.ADMIN_PORT   || 8200;
+const USER_PORT    = process.env.USER_PORT    || 8201;
+const JOB_APP_PORT = process.env.JOB_APP_PORT || 8202;
 
 // ── Agent store ──────────────────────────────────────────────────────────────
 const agents = new Map();
@@ -42,7 +47,8 @@ function broadcastAdmin(event, data) {
 // ── Shared security middleware ───────────────────────────────────────────────
 const CORS_ORIGINS = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',')
-  : ['http://187.77.70.209:8200', 'http://187.77.70.209:8201', 'http://localhost:8200', 'http://localhost:8201'];
+  : ['http://187.77.70.209:8200', 'http://187.77.70.209:8201', 'http://187.77.70.209:8202',
+     'http://localhost:8200', 'http://localhost:8201', 'http://localhost:8202'];
 
 const corsOptions = {
   origin: (origin, cb) => {
@@ -412,6 +418,64 @@ agentIo.on('connection', (socket) => {
 
 userServer.listen(USER_PORT, '0.0.0.0', () => {
   console.log(`\x1b[36m[CORTEX]\x1b[0m User Panel + Agent → port ${USER_PORT}`);
+});
+
+// ─────────────────────────────────────────────
+// JOB APPLICATION SERVER (port 8202)
+// ─────────────────────────────────────────────
+const jobApp = express();
+jobApp.set('trust proxy', 1);
+jobApp.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:"],
+      connectSrc: ["'self'", "ws:", "wss:"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    }
+  },
+  hsts: { maxAge: 31536000, includeSubDomains: true },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
+}));
+jobApp.use(cors(corsOptions));
+jobApp.use(express.json({ limit: '100kb' }));
+jobApp.use(express.static(path.join(__dirname, 'public', 'jobs')));
+jobApp.use('/assets', express.static(path.join(__dirname, 'assets')));
+
+jobApp.use('/api/auth', rateLimiter(30, 60000), require('./src/routes/auth'));
+jobApp.use('/api/jobs', rateLimiter(60, 60000), require('./src/routes/jobs'));
+
+jobApp.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'jobs', 'index.html')));
+
+const jobServer = http.createServer(jobApp);
+
+const jobIo = new Server(jobServer, {
+  cors: corsOptions,
+  maxHttpBufferSize: 1e5
+});
+
+jobIo.on('connection', (socket) => {
+  const origin = socket.handshake.headers.origin;
+  if (origin && !CORS_ORIGINS.includes(origin)) { socket.disconnect(); return; }
+
+  const cookies = parseCookies(socket.handshake.headers.cookie);
+  const sessionToken = cookies.session;
+  try {
+    const decoded = jwt.verify(sessionToken, JWT_SECRET);
+    socket.join(`job_${decoded.userId}`);
+    socket.on('disconnect', () => {});
+  } catch { socket.disconnect(); }
+});
+
+// Make jobIo available to routes
+jobApp.set('jobIo', jobIo);
+
+jobServer.listen(JOB_APP_PORT, '0.0.0.0', () => {
+  console.log(`\x1b[36m[CORTEX]\x1b[0m Auto-Bewerbungen  → port ${JOB_APP_PORT}`);
 });
 
 console.log(`\x1b[32m[CORTEX]\x1b[0m CORTEX IT Support Agent gestartet`);
